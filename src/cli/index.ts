@@ -282,7 +282,7 @@ program
       const llmManager = new LLMManager(llmConfig);
       
       // 初始化自然语言查询
-      const nlpQuery = new NLPQuery(sdk.getDatabase(), llmManager);
+      const nlpQuery = new NLPQuery(sdk.getDatabase(), llmManager, configPath);
       
       // 执行查询
       const result = await nlpQuery.execute({ query });

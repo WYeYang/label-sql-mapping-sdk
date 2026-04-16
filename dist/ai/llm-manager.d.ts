@@ -4,6 +4,7 @@ import { LLMConfig } from './types';
  */
 export declare class LLMManager {
     private config;
+    private openai;
     /**
      * 构造函数
      * @param config 大模型配置
@@ -25,13 +26,9 @@ export declare class LLMManager {
      * @param schema 数据库 schema 信息
      * @returns 生成的SQL查询
      */
-    generateSQL(naturalLanguageQuery: string, schema: string): Promise<string>;
-    /**
-     * 处理自然语言查询
-     * @param query 自然语言查询
-     * @param context 上下文信息
-     * @returns 处理结果
-     */
-    processNaturalLanguage(query: string, context?: any): Promise<any>;
+    generateSQL(naturalLanguageQuery: string, schema: string): Promise<{
+        sql: string;
+        explanation: string;
+    }>;
 }
 //# sourceMappingURL=llm-manager.d.ts.map

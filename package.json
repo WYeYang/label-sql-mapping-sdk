@@ -25,6 +25,7 @@
   "type": "commonjs",
   "dependencies": {
     "commander": "^12.1.0",
+    "openai": "^6.34.0",
     "simple-git": "^3.24.0",
     "sqlite3": "^5.1.7",
     "yaml": "^2.3.4"

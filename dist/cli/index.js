@@ -240,7 +240,7 @@ program
         };
         const llmManager = new ai_1.LLMManager(llmConfig);
         // 初始化自然语言查询
-        const nlpQuery = new ai_1.NLPQuery(sdk.getDatabase(), llmManager);
+        const nlpQuery = new ai_1.NLPQuery(sdk.getDatabase(), llmManager, configPath);
         // 执行查询
         const result = await nlpQuery.execute({ query });
         // 显示结果

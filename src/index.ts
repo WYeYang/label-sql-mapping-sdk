@@ -1,12 +1,6 @@
 // LSM SDK 主入口
 
-export * from './config';
-export * from './db';
-export * from './git';
-export * from './label';
-export * from './ai';
-export * from './utils';
-export * from './sdk';
+export { NaturalLanguageQuery, QueryResult } from './natural-language-query';
 
 /**
  * LSM SDK 版本

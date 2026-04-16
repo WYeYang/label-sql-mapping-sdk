@@ -2,6 +2,7 @@
 // 大模型管理器
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LLMManager = void 0;
+const openai_1 = require("openai");
 /**
  * 大模型管理器
  */
@@ -12,6 +13,10 @@ class LLMManager {
      */
     constructor(config) {
         this.config = config;
+        this.openai = new openai_1.OpenAI({
+            apiKey: config.apiKey,
+            baseURL: config.baseUrl
+        });
     }
     /**
      * 获取大模型配置
@@ -26,6 +31,10 @@ class LLMManager {
      */
     updateConfig(config) {
         this.config = { ...this.config, ...config };
+        this.openai = new openai_1.OpenAI({
+            apiKey: this.config.apiKey,
+            baseURL: this.config.baseUrl
+        });
     }
     /**
      * 生成SQL查询
@@ -34,31 +43,60 @@ class LLMManager {
      * @returns 生成的SQL查询
      */
     async generateSQL(naturalLanguageQuery, schema) {
-        // 这里将实现与大模型的交互，生成SQL查询
-        // 目前返回一个模拟的SQL查询
-        // 实际实现需要调用OpenAI API或其他大模型API
         console.log(`生成SQL查询: ${naturalLanguageQuery}`);
         console.log(`数据库schema: ${schema}`);
-        // 模拟生成SQL
-        return `SELECT * FROM cards WHERE name LIKE '%${naturalLanguageQuery}%' LIMIT 10`;
-    }
-    /**
-     * 处理自然语言查询
-     * @param query 自然语言查询
-     * @param context 上下文信息
-     * @returns 处理结果
-     */
-    async processNaturalLanguage(query, context) {
-        // 这里将实现与大模型的交互，处理自然语言查询
-        // 目前返回一个模拟的结果
-        // 实际实现需要调用OpenAI API或其他大模型API
-        console.log(`处理自然语言查询: ${query}`);
-        console.log(`上下文信息: ${JSON.stringify(context)}`);
-        // 模拟处理结果
-        return {
-            response: `处理查询: ${query}`,
-            context: context
-        };
+        // 检查配置
+        if (!this.config.apiKey || !this.config.baseUrl) {
+            throw new Error('大模型配置不完整，缺少API Key或API URL');
+        }
+        try {
+            // 使用OpenAI SDK调用LLM API
+            const response = await this.openai.chat.completions.create({
+                model: this.config.model || 'qwen3.5-flash',
+                messages: [
+                    {
+                        role: 'system',
+                        content: `你是一个SQL生成器，根据用户的自然语言查询和数据库schema生成正确的SQL查询。
+
+请生成符合SQLite语法的查询语句，并返回JSON格式，包含以下字段：
+- sql: 生成的SQL查询语句
+- explanation: 对SQL查询的解释，说明为什么这样写
+
+示例输出：
+{
+  "sql": "SELECT * FROM table1 t1 LEFT JOIN table2 t2 ON t1.id = t2.id WHERE t1.name LIKE '%keyword%'",
+  "explanation": "根据用户查询，需要在table1表中查找name字段包含关键词的记录，同时通过LEFT JOIN连接table2表获取完整信息。"
+}`
+                    },
+                    {
+                        role: 'user',
+                        content: `根据以下schema信息，生成查询"${naturalLanguageQuery}"的SQL语句：
+
+${schema}`
+                    }
+                ],
+                temperature: this.config.temperature || 0.7,
+                max_tokens: this.config.maxTokens || 500,
+                response_format: { type: "json_object" }
+            });
+            if (response.choices && response.choices[0] && response.choices[0].message && response.choices[0].message.content) {
+                const content = response.choices[0].message.content.trim();
+                const result = JSON.parse(content);
+                if (result.sql && result.explanation) {
+                    return {
+                        sql: result.sql.replace(/;$/, ''),
+                        explanation: result.explanation
+                    };
+                }
+                else {
+                    throw new Error('LLM返回的JSON格式不正确，缺少必要字段');
+                }
+            }
+            throw new Error('LLM返回格式错误，无法获取SQL查询');
+        }
+        catch (error) {
+            throw new Error(`调用LLM API失败: ${error.message}`);
+        }
     }
 }
 exports.LLMManager = LLMManager;

@@ -7,12 +7,15 @@ import { LLMManager } from './llm-manager';
 export declare class NLPQuery {
     private database;
     private llmManager;
+    private configPath;
+    private schema;
     /**
      * 构造函数
      * @param database 数据库实例
      * @param llmManager 大模型管理器
+     * @param configPath LSM配置文件路径
      */
-    constructor(database: Database, llmManager: LLMManager);
+    constructor(database: Database, llmManager: LLMManager, configPath: string);
     /**
      * 执行自然语言查询
      * @param request 查询请求
