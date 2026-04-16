@@ -41,6 +41,7 @@ const nlp_query_1 = require("./ai/nlp-query");
 const llm_manager_1 = require("./ai/llm-manager");
 const openai_llm_1 = require("./ai/openai-llm");
 const app_config_1 = require("./config/app-config");
+const sql_builder_1 = require("./db/sql-builder");
 dotenv.config();
 class LSMSDK {
     constructor(appConfigPath, lsmConfigPath, llm) {
@@ -50,6 +51,7 @@ class LSMSDK {
         this.database = db_1.DatabaseFactory.create(appConfigManager, this.lsmConfig);
         this.llmManager = new llm_manager_1.LLMManager(llm ?? new openai_llm_1.OpenAILLM(appConfigManager.getLLMConfig()));
         this.nlpQuery = new nlp_query_1.NLPQuery(this.llmManager, this.lsmConfig);
+        this.sqlBuilder = new sql_builder_1.SQLBuilder(this.lsmConfig);
     }
     static async fromAppConfig(appConfigPath, lsmConfigPath, llm) {
         const sdk = new LSMSDK(appConfigPath, lsmConfigPath, llm);
@@ -57,30 +59,44 @@ class LSMSDK {
         sdk.inited = true;
         return sdk;
     }
+    /**
+     * 自然语言查询
+     * AI只生成WHERE条件，SELECT由程序拼接
+     */
     async query(options) {
-        const { query, sql, page = 1, pageSize = 20 } = options;
-        let finalSql;
+        const { query, where, sql, page = 1, pageSize = 20 } = options;
+        let finalWhere;
         let explanation;
         if (query) {
+            // 自然语言查询：AI生成WHERE条件
             const result = await this.nlpQuery.execute(query);
-            finalSql = result.sql;
+            finalWhere = result.sql; // 旧接口返回的是where
             explanation = result.explanation;
         }
+        else if (where) {
+            // 直接传入WHERE条件
+            finalWhere = where;
+        }
         else if (sql) {
-            finalSql = sql;
+            // 完整SQL（兼容旧接口）
+            // 尝试提取WHERE子句
+            const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+ORDER|\s+LIMIT|\s*$)/i);
+            finalWhere = whereMatch ? whereMatch[1] : '';
         }
         else {
-            throw new Error('请提供 query 或 sql 参数');
+            throw new Error('请提供 query、where 或 sql 参数');
         }
-        const countSql = `SELECT COUNT(*) as total FROM (${finalSql}) as count_query`;
+        // 构建完整SQL
+        const offset = (page - 1) * pageSize;
+        const fullSql = this.sqlBuilder.build(finalWhere, { limit: pageSize, offset });
+        // 计数
+        const countSql = this.sqlBuilder.buildCount(finalWhere);
         const countResult = this.database.query(countSql);
         const total = countResult.rows[0]?.total || 0;
-        const offset = (page - 1) * pageSize;
-        const hasLimit = /\bLIMIT\b/i.test(finalSql);
-        const paginatedSql = hasLimit ? finalSql : `${finalSql} LIMIT ${pageSize} OFFSET ${offset}`;
-        const queryResult = this.database.query(paginatedSql);
+        // 执行查询
+        const queryResult = this.database.query(fullSql);
         return {
-            sql: paginatedSql,
+            sql: fullSql,
             data: queryResult.rows,
             total,
             page,
@@ -88,6 +104,22 @@ class LSMSDK {
             totalPages: Math.ceil(total / pageSize),
             explanation
         };
+    }
+    /**
+     * 仅生成WHERE条件（不执行查询）
+     */
+    async generateFilter(query) {
+        const result = await this.llmManager.generateFilter(query, this.lsmConfig.rawContent ?? '');
+        return {
+            where: result.where,
+            explanation: result.explanation
+        };
+    }
+    /**
+     * 执行自定义WHERE条件查询
+     */
+    queryByWhere(where, options) {
+        return this.query({ where, ...options });
     }
 }
 exports.LSMSDK = LSMSDK;

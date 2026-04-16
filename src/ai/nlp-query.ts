@@ -4,7 +4,8 @@ import { LLMManager } from './llm-manager';
 import { LSMConfig } from '../config';
 
 export interface NLResult {
-  sql: string;
+  sql: string;         // WHERE条件（兼容旧接口）
+  where: string;       // WHERE条件
   explanation: string;
 }
 
@@ -22,6 +23,11 @@ export class NLPQuery {
 
   async execute(query: string): Promise<NLResult> {
     const schema = this.config.rawContent ?? '';
-    return this.llmManager.generateSQL(query, schema);
+    const result = await this.llmManager.generateFilter(query, schema);
+    return {
+      sql: result.where,      // 兼容旧接口
+      where: result.where,
+      explanation: result.explanation
+    };
   }
 }

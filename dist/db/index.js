@@ -18,4 +18,5 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./types"), exports);
 __exportStar(require("./sqlite"), exports);
 __exportStar(require("./factory"), exports);
+__exportStar(require("./sql-builder"), exports);
 //# sourceMappingURL=index.js.map
