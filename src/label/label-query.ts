@@ -78,7 +78,7 @@ export class LabelQuery {
         
         try {
           // 执行查询
-          const queryResult = await this.database.query(sql, [dataId]);
+          const queryResult = await this.database.query(sql);
           
           // 如果查询有结果，说明数据匹配此标签项
           if (queryResult.rows && queryResult.rows.length > 0) {

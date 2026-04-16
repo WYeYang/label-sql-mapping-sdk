@@ -38,21 +38,23 @@ exports.parseConfig = parseConfig;
 exports.validateLSMConfig = validateLSMConfig;
 const fs = __importStar(require("fs"));
 const yaml = __importStar(require("yaml"));
+let configCache = null;
+let cachedPath = null;
 /**
- * 解析LSM配置文件
- * @param configPath 配置文件路径
- * @returns LSM配置对象
+ * 解析LSM配置文件（单例模式）
  */
 function parseConfig(configPath) {
+    if (configCache && cachedPath === configPath) {
+        return configCache;
+    }
     try {
-        // 读取配置文件
         const configContent = fs.readFileSync(configPath, 'utf8');
-        // 解析YAML
         const parsedConfig = yaml.parse(configContent);
-        // 验证配置结构
         validateConfig(parsedConfig);
-        // 处理默认值
         const processedConfig = processConfigDefaults(parsedConfig);
+        processedConfig.rawContent = configContent;
+        configCache = processedConfig;
+        cachedPath = configPath;
         return processedConfig;
     }
     catch (error) {

@@ -1,85 +1,90 @@
 // SDK核心类
 
-import { LSMConfig, parseConfig } from './config';
-import { Database, DBConfig, DatabaseFactory, SQLQueryBuilder, QueryResult } from './db';
+import * as dotenv from 'dotenv';
+import { Database, DatabaseFactory } from './db';
+import { NLPQuery, NLResult } from './ai/nlp-query';
+import { LLMManager } from './ai/llm-manager';
+import { OpenAILLM } from './ai/openai-llm';
+import { LLM } from './ai/types';
+import { AppConfigManager } from './config/app-config';
 
-/**
- * LSM SDK 核心类
- */
+dotenv.config();
+
+export interface QueryResult {
+  sql: string;
+  data: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  explanation?: string;
+}
+
 export class LSMSDK {
-  private config: LSMConfig;
-  private database: Database;
+  private readonly lsmConfig;
+  private readonly database;
+  private readonly llmManager;
+  private readonly nlpQuery;
+  private inited = false;
 
-  /**
-   * 构造函数
-   * @param configPath LSM配置文件路径
-   * @param dbConfig 数据库配置
-   */
-  constructor(configPath: string, dbConfig: DBConfig) {
-    // 解析LSM配置
-    this.config = parseConfig(configPath);
-    
-    // 创建数据库实例
-    this.database = DatabaseFactory.create(dbConfig);
+  private constructor(
+    appConfigPath: string,
+    lsmConfigPath: string,
+    llm?: LLM
+  ) {
+    const appConfigManager = AppConfigManager.getInstance(appConfigPath, lsmConfigPath);
+
+    this.lsmConfig = appConfigManager.getLSMConfig();
+    this.database = DatabaseFactory.create(appConfigManager, this.lsmConfig);
+    this.llmManager = new LLMManager(llm ?? new OpenAILLM(appConfigManager.getLLMConfig()));
+    this.nlpQuery = new NLPQuery(this.llmManager, this.lsmConfig);
   }
 
-  /**
-   * 获取LSM配置
-   * @returns LSM配置
-   */
-  getConfig(): LSMConfig {
-    return this.config;
+  static async fromAppConfig(appConfigPath: string, lsmConfigPath: string, llm?: LLM): Promise<LSMSDK> {
+    const sdk = new LSMSDK(appConfigPath, lsmConfigPath, llm);
+    await sdk.database.init();
+    sdk.inited = true;
+    return sdk;
   }
 
-  /**
-   * 获取数据库实例
-   * @returns 数据库实例
-   */
-  getDatabase(): Database {
-    return this.database;
-  }
-
-  /**
-   * 执行查询
-   * @param condition SQL条件
-   * @param options 查询选项
-   * @returns 查询结果
-   */
-  async query(condition: string, options?: {
-    limit?: number;
-    offset?: number;
-    orderBy?: string;
-    orderDirection?: 'ASC' | 'DESC';
+  async query(options: {
+    query?: string;
+    sql?: string;
+    page?: number;
+    pageSize?: number;
   }): Promise<QueryResult> {
-    // 创建查询构建器
-    const queryBuilder = new SQLQueryBuilder();
-    
-    // 构建SQL查询
-    const sql = queryBuilder
-      .from(this.config.database.tables)
-      .where(condition)
-      .limit(options?.limit || 0, options?.offset || 0)
-      .orderBy(options?.orderBy || '', options?.orderDirection || 'ASC')
-      .build();
-    
-    // 执行查询
-    return this.database.query(sql);
-  }
+    const { query, sql, page = 1, pageSize = 20 } = options;
 
-  /**
-   * 执行SQL语句
-   * @param sql SQL语句
-   * @param params 参数
-   * @returns 受影响的行数
-   */
-  async execute(sql: string, params?: any[]): Promise<number> {
-    return this.database.execute(sql, params);
-  }
+    let finalSql: string;
+    let explanation: string | undefined;
 
-  /**
-   * 关闭SDK
-   */
-  async close(): Promise<void> {
-    await this.database.close();
+    if (query) {
+      const result = await this.nlpQuery.execute(query);
+      finalSql = result.sql;
+      explanation = result.explanation;
+    } else if (sql) {
+      finalSql = sql;
+    } else {
+      throw new Error('请提供 query 或 sql 参数');
+    }
+
+    const countSql = `SELECT COUNT(*) as total FROM (${finalSql}) as count_query`;
+    const countResult = this.database.query(countSql);
+    const total = countResult.rows[0]?.total || 0;
+
+    const offset = (page - 1) * pageSize;
+    const hasLimit = /\bLIMIT\b/i.test(finalSql);
+    const paginatedSql = hasLimit ? finalSql : `${finalSql} LIMIT ${pageSize} OFFSET ${offset}`;
+    const queryResult = this.database.query(paginatedSql);
+
+    return {
+      sql: paginatedSql,
+      data: queryResult.rows,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+      explanation
+    };
   }
 }

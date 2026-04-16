@@ -24,7 +24,7 @@ export interface TableConfig {
  * 数据库配置
  */
 export interface DatabaseConfig {
-  type: DatabaseType;  // 数据库类型
+  type: DatabaseType;    // 数据库类型
   tables: TableConfig[]; // 表配置数组
 }
 
@@ -54,4 +54,5 @@ export interface LSMConfig {
   id: string;                  // 配置唯一标识
   database: DatabaseConfig;    // 数据库配置
   mappings: LabelMapping[];    // 标签映射集合
+  rawContent?: string;         // 原始配置文件内容
 }

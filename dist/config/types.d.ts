@@ -46,5 +46,6 @@ export interface LSMConfig {
     id: string;
     database: DatabaseConfig;
     mappings: LabelMapping[];
+    rawContent?: string;
 }
 //# sourceMappingURL=types.d.ts.map

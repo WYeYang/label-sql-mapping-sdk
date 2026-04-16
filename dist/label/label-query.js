@@ -65,7 +65,7 @@ class LabelQuery {
                 const sql = `SELECT * FROM ${this.config.database.tables[0].name} WHERE id = ? AND ${item.condition}`;
                 try {
                     // 执行查询
-                    const queryResult = await this.database.query(sql, [dataId]);
+                    const queryResult = await this.database.query(sql);
                     // 如果查询有结果，说明数据匹配此标签项
                     if (queryResult.rows && queryResult.rows.length > 0) {
                         results.push({

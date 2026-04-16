@@ -4,48 +4,80 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
 import { LLMConfig } from '../ai';
+import { LSMConfig, parseConfig } from './index';
 
-export interface AppConfig {
-  database: {
-    path: string;
-  };
-  llm: {
-    apiKey?: string;
-    apiUrl?: string;
-    model?: string;
-    temperature?: number;
-    maxTokens?: number;
-  };
-}
+let instance: AppConfigManager | null = null;
 
 export class AppConfigManager {
-  private config: AppConfig | null = null;
-  private configPath: string;
+  private appConfig: Record<string, any> | null = null;
+  private lsmConfig: LSMConfig | null = null;
 
-  constructor(configPath: string) {
-    this.configPath = configPath;
-  }
+  private constructor(
+    public readonly appConfigPath: string,
+    public readonly lsmConfigPath: string
+  ) {}
 
-  load() {
-    if (fs.existsSync(this.configPath)) {
-      const content = fs.readFileSync(this.configPath, 'utf8');
-      this.config = yaml.parse(content);
+  static getInstance(appConfigPath: string, lsmConfigPath: string): AppConfigManager {
+    if (!instance) {
+      instance = new AppConfigManager(appConfigPath, lsmConfigPath);
+      instance.load();
     }
+    return instance;
   }
 
-  getDatabasePath(): string | null {
-    return this.config?.database?.path || null;
+  private load(): void {
+    if (fs.existsSync(this.appConfigPath)) {
+      const content = fs.readFileSync(this.appConfigPath, 'utf8');
+      this.appConfig = yaml.parse(content);
+    }
+    this.lsmConfig = parseConfig(this.lsmConfigPath);
+  }
+
+  getDatabasePath(): string {
+    const dbPath = this.appConfig?.database?.path;
+    if (!dbPath) {
+      throw new Error('错误: 请在应用配置文件中配置数据库文件路径');
+    }
+    if (!path.isAbsolute(dbPath)) {
+      const configDir = path.dirname(this.appConfigPath);
+      return path.resolve(configDir, dbPath);
+    }
+    return dbPath;
   }
 
   getLLMConfig(): LLMConfig {
-    const llmConfig = this.config?.llm || {};
+    const llmConfig = this.appConfig?.llm;
+    if (!llmConfig) {
+      throw new Error('错误: 请在配置文件中配置 LLM');
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY || llmConfig.apiKey;
+    const baseUrl = process.env.OPENAI_API_URL || llmConfig.apiUrl;
+    const model = process.env.OPENAI_MODEL || llmConfig.model;
+
+    if (!apiKey) {
+      throw new Error('错误: 请配置 LLM apiKey');
+    }
+    if (!baseUrl) {
+      throw new Error('错误: 请配置 LLM apiUrl');
+    }
+    if (!model) {
+      throw new Error('错误: 请配置 LLM model');
+    }
+
     return {
-      provider: 'openai',
-      apiKey: process.env.OPENAI_API_KEY || llmConfig.apiKey || '',
-      baseUrl: process.env.OPENAI_API_URL || llmConfig.apiUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      model: process.env.OPENAI_MODEL || llmConfig.model || 'qwen3.5-flash',
-      temperature: llmConfig.temperature || 0.7,
-      maxTokens: llmConfig.maxTokens || 500
+      apiKey,
+      baseUrl,
+      model,
+      temperature: llmConfig.temperature,
+      maxTokens: llmConfig.maxTokens
     };
+  }
+
+  getLSMConfig(): LSMConfig {
+    if (!this.lsmConfig) {
+      throw new Error('LSM 配置未初始化');
+    }
+    return this.lsmConfig;
   }
 }

@@ -1,13 +1,10 @@
-import { Database, DBConfig } from './types';
+import { Database } from './types';
+import { AppConfigManager } from '../config';
+import { LSMConfig } from '../config';
 /**
  * 数据库工厂
  */
 export declare class DatabaseFactory {
-    /**
-     * 创建数据库实例
-     * @param config 数据库配置
-     * @returns 数据库实例
-     */
-    static create(config: DBConfig): Database;
+    static create(appConfigManager: AppConfigManager, lsmConfig: LSMConfig): Database;
 }
 //# sourceMappingURL=factory.d.ts.map

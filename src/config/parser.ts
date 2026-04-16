@@ -4,26 +4,30 @@ import * as fs from 'fs';
 import * as yaml from 'yaml';
 import { LSMConfig, TableConfig } from './types';
 
+let configCache: LSMConfig | null = null;
+let cachedPath: string | null = null;
+
 /**
- * 解析LSM配置文件
- * @param configPath 配置文件路径
- * @returns LSM配置对象
+ * 解析LSM配置文件（单例模式）
  */
 export function parseConfig(configPath: string): LSMConfig {
+  if (configCache && cachedPath === configPath) {
+    return configCache;
+  }
+
   try {
-    // 读取配置文件
     const configContent = fs.readFileSync(configPath, 'utf8');
-    
-    // 解析YAML
     const parsedConfig = yaml.parse(configContent);
-    
-    // 验证配置结构
+
     validateConfig(parsedConfig);
-    
-    // 处理默认值
-    const processedConfig = processConfigDefaults(parsedConfig);
-    
-    return processedConfig as LSMConfig;
+
+    const processedConfig = processConfigDefaults(parsedConfig) as LSMConfig;
+    processedConfig.rawContent = configContent;
+
+    configCache = processedConfig;
+    cachedPath = configPath;
+
+    return processedConfig;
   } catch (error) {
     throw new Error(`解析配置文件失败: ${(error as Error).message}`);
   }

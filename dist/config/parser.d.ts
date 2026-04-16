@@ -1,8 +1,6 @@
 import { LSMConfig } from './types';
 /**
- * 解析LSM配置文件
- * @param configPath 配置文件路径
- * @returns LSM配置对象
+ * 解析LSM配置文件（单例模式）
  */
 export declare function parseConfig(configPath: string): LSMConfig;
 /**

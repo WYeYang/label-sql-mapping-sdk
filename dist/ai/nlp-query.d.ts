@@ -1,31 +1,16 @@
-import { NLPQueryRequest, NLPQueryResult } from './types';
-import { Database } from '../db';
 import { LLMManager } from './llm-manager';
+import { LSMConfig } from '../config';
+export interface NLResult {
+    sql: string;
+    explanation: string;
+}
 /**
  * 自然语言查询工具
  */
 export declare class NLPQuery {
-    private database;
     private llmManager;
-    private configPath;
-    private schema;
-    /**
-     * 构造函数
-     * @param database 数据库实例
-     * @param llmManager 大模型管理器
-     * @param configPath LSM配置文件路径
-     */
-    constructor(database: Database, llmManager: LLMManager, configPath: string);
-    /**
-     * 执行自然语言查询
-     * @param request 查询请求
-     * @returns 查询结果
-     */
-    execute(request: NLPQueryRequest): Promise<NLPQueryResult>;
-    /**
-     * 获取数据库schema信息
-     * @returns schema信息
-     */
-    private getDatabaseSchema;
+    private config;
+    constructor(llmManager: LLMManager, config: LSMConfig);
+    execute(query: string): Promise<NLResult>;
 }
 //# sourceMappingURL=nlp-query.d.ts.map

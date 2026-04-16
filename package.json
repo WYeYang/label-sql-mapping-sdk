@@ -4,13 +4,15 @@
   "description": "Label-SQL Mapping SDK for database query and AI integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "lsm": "dist/cli/index.js"
-  },
   "scripts": {
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsc --watch"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sqlite3"
+    ]
   },
   "keywords": [
     "lsm",
@@ -24,13 +26,14 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "better-sqlite3": "^12.9.0",
     "commander": "^12.1.0",
     "openai": "^6.34.0",
     "simple-git": "^3.24.0",
-    "sqlite3": "^5.1.7",
     "yaml": "^2.3.4"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.11.30",
     "typescript": "^5.4.3"
   }

@@ -1,22 +1,15 @@
 import { LLMConfig } from '../ai';
-export interface AppConfig {
-    database: {
-        path: string;
-    };
-    llm: {
-        apiKey?: string;
-        apiUrl?: string;
-        model?: string;
-        temperature?: number;
-        maxTokens?: number;
-    };
-}
+import { LSMConfig } from './index';
 export declare class AppConfigManager {
-    private config;
-    private configPath;
-    constructor(configPath: string);
-    load(): void;
-    getDatabasePath(): string | null;
+    readonly appConfigPath: string;
+    readonly lsmConfigPath: string;
+    private appConfig;
+    private lsmConfig;
+    private constructor();
+    static getInstance(appConfigPath: string, lsmConfigPath: string): AppConfigManager;
+    private load;
+    getDatabasePath(): string;
     getLLMConfig(): LLMConfig;
+    getLSMConfig(): LSMConfig;
 }
 //# sourceMappingURL=app-config.d.ts.map
