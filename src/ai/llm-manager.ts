@@ -2,6 +2,14 @@
 
 import { LLM } from './types';
 
+interface FilterResult {
+  hasIntent: boolean;
+  where: string;
+  orderBy?: string;
+  limit?: number;
+  explanation: string;
+}
+
 /**
  * LLM Manager
  */
@@ -13,49 +21,40 @@ export class LLMManager {
   }
 
   /**
-   * 生成筛选条件（WHERE子句）
-   * 只生成 WHERE 部分，SELECT 由程序拼接
+   * 解析自然语言查询意图
+   * 返回查询条件、排序、数量限制等片段
    */
-  async generateFilter(naturalLanguageQuery: string, schema: string): Promise<{ where: string; explanation: string }> {
-    const systemPrompt = `你是一个SQL筛选条件生成器。
+  async parseQuery(naturalLanguageQuery: string, schema: string): Promise<FilterResult> {
+    const systemPrompt = `根据用户输入生成SQLite条件片段。
 
-任务：根据用户的自然语言查询，生成SQLite的WHERE筛选条件。
+Schema:
+${schema}
 
-规则：
-1. 只生成WHERE子句，不需要SELECT、FROM等部分
-2. WHERE子句应该描述"筛选什么"，不包含排序(LIMIT/ORDER BY)
-3. 使用中文别名来匹配schema中的字段
-4. 如果无法确定筛选条件，返回空字符串 ""
-5. 多个条件用 AND 连接
+输出JSON格式，包含以下字段：
+- hasIntent: 用户是否有查询意图，无查询意图时为 false
+- where: 筛选条件表达式，无筛选意图时为空字符串
+- orderBy: 排序表达式，无排序需求时为undefined
+- limit: 数量，无数量限制时为undefined
+- explanation: 解释where、orderBy、limit的内容，无查询意图时为空字符串
 
-返回JSON格式：{"where": "WHERE条件", "explanation": "条件解释"}
-
-示例：
-查询: 攻击力大于2000的怪兽
-返回: {"where": "d.atk > 2000", "explanation": "筛选攻击力大于2000的卡片"}
-
-查询: 暗属性战士族怪兽
-返回: {"where": "d.attribute = 32 AND d.race = 1", "explanation": "筛选暗属性且战士族的怪兽"}`;
+请以JSON格式输出：`;
 
     const messages = [
       { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: `Schema:\n${schema}\n\n查询: ${naturalLanguageQuery}` }
+      { role: 'user' as const, content: `查询: ${naturalLanguageQuery}` }
     ];
 
     const response = await this.llm.chat(messages);
-    const result = JSON.parse(response);
+    const result: FilterResult = JSON.parse(response);
 
-    return {
-      where: result.where?.trim() || '',
-      explanation: result.explanation?.trim() || ''
-    };
+    return result;
   }
 
   /**
    * 兼容旧方法
    */
   async generateSQL(naturalLanguageQuery: string, schema: string): Promise<{ sql: string; explanation: string }> {
-    const { where, explanation } = await this.generateFilter(naturalLanguageQuery, schema);
+    const { where, explanation } = await this.parseQuery(naturalLanguageQuery, schema);
     return {
       sql: where,
       explanation

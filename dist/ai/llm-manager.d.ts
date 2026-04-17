@@ -11,6 +11,8 @@ export declare class LLMManager {
      */
     generateFilter(naturalLanguageQuery: string, schema: string): Promise<{
         where: string;
+        orderBy?: string;
+        limit?: number;
         explanation: string;
     }>;
     /**

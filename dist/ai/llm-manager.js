@@ -14,25 +14,17 @@ class LLMManager {
      * 只生成 WHERE 部分，SELECT 由程序拼接
      */
     async generateFilter(naturalLanguageQuery, schema) {
-        const systemPrompt = `你是一个SQL筛选条件生成器。
+        const systemPrompt = `根据用户输入生成SQLite条件片段。
 
-任务：根据用户的自然语言查询，生成SQLite的WHERE筛选条件。
+输出JSON格式，包含以下字段：
+- where: 筛选条件表达式，不含WHERE关键字
+- orderBy: 排序表达式如atk DESC，无排序需求时为undefined
+- limit: 数量，无数量限制时为undefined
+- explanation: 用户意图解释
 
-规则：
-1. 只生成WHERE子句，不需要SELECT、FROM等部分
-2. WHERE子句应该描述"筛选什么"，不包含排序(LIMIT/ORDER BY)
-3. 使用中文别名来匹配schema中的字段
-4. 如果无法确定筛选条件，返回空字符串 ""
-5. 多个条件用 AND 连接
+根据语义自行判断是否需要排序和数量限制。
 
-返回JSON格式：{"where": "WHERE条件", "explanation": "条件解释"}
-
-示例：
-查询: 攻击力大于2000的怪兽
-返回: {"where": "d.atk > 2000", "explanation": "筛选攻击力大于2000的卡片"}
-
-查询: 暗属性战士族怪兽
-返回: {"where": "d.attribute = 32 AND d.race = 1", "explanation": "筛选暗属性且战士族的怪兽"}`;
+请以JSON格式输出：`;
         const messages = [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Schema:\n${schema}\n\n查询: ${naturalLanguageQuery}` }
@@ -41,6 +33,8 @@ class LLMManager {
         const result = JSON.parse(response);
         return {
             where: result.where?.trim() || '',
+            orderBy: result.orderBy?.trim() || undefined,
+            limit: result.limit,
             explanation: result.explanation?.trim() || ''
         };
     }

@@ -2,7 +2,7 @@
 
 import * as dotenv from 'dotenv';
 import { Database, DatabaseFactory } from './db';
-import { NLPQuery, NLResult } from './ai/nlp-query';
+import { NLPQuery } from './ai/nlp-query';
 import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
 import { LLM } from './ai/types';
@@ -56,47 +56,37 @@ export class LSMSDK {
    */
   async query(options: {
     query?: string;
-    where?: string;
     sql?: string;
     page?: number;
     pageSize?: number;
   }): Promise<QueryResult> {
-    const { query, where, sql, page = 1, pageSize = 20 } = options;
+    const { query, sql, page = 1, pageSize = 20 } = options;
 
-    let finalWhere: string;
     let explanation: string | undefined;
+    let sqlStr = sql ?? '';
 
     if (query) {
       // 自然语言查询：AI生成WHERE条件
       const result = await this.nlpQuery.execute(query);
-      finalWhere = result.sql; // 旧接口返回的是where
       explanation = result.explanation;
-    } else if (where) {
-      // 直接传入WHERE条件
-      finalWhere = where;
-    } else if (sql) {
-      // 完整SQL（兼容旧接口）
-      // 尝试提取WHERE子句
-      const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+ORDER|\s+LIMIT|\s*$)/i);
-      finalWhere = whereMatch ? whereMatch[1] : '';
-    } else {
-      throw new Error('请提供 query、where 或 sql 参数');
+      sqlStr = this.sqlBuilder.build(result.where, { orderBy: result.orderBy, limit: result.limit });
     }
 
-    // 构建完整SQL
-    const offset = (page - 1) * pageSize;
-    const fullSql = this.sqlBuilder.build(finalWhere, { limit: pageSize, offset });
+    if (!sqlStr) {
+      throw new Error('请提供 query 或 sql 参数');
+    }
 
     // 计数
-    const countSql = this.sqlBuilder.buildCount(finalWhere);
+    const countSql = this.sqlBuilder.build(sqlStr, { count: true });
     const countResult = this.database.query(countSql);
     const total = countResult.rows[0]?.total || 0;
 
-    // 执行查询
+    // 执行查询（最后拼接 labels）
+    const fullSql = this.sqlBuilder.build(sqlStr, { labels: true, limit: pageSize, offset: (page - 1) * pageSize });
     const queryResult = this.database.query(fullSql);
 
     return {
-      sql: fullSql,
+      sql: sqlStr,
       data: queryResult.rows,
       total,
       page,
@@ -104,23 +94,5 @@ export class LSMSDK {
       totalPages: Math.ceil(total / pageSize),
       explanation
     };
-  }
-
-  /**
-   * 仅生成WHERE条件（不执行查询）
-   */
-  async generateFilter(query: string): Promise<{ where: string; explanation: string }> {
-    const result = await this.llmManager.generateFilter(query, this.lsmConfig.rawContent ?? '');
-    return {
-      where: result.where,
-      explanation: result.explanation
-    };
-  }
-
-  /**
-   * 执行自定义WHERE条件查询
-   */
-  queryByWhere(where: string, options?: { page?: number; pageSize?: number }): Promise<QueryResult> {
-    return this.query({ where, ...options });
   }
 }

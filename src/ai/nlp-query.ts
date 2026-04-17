@@ -3,12 +3,6 @@
 import { LLMManager } from './llm-manager';
 import { LSMConfig } from '../config';
 
-export interface NLResult {
-  sql: string;         // WHERE条件（兼容旧接口）
-  where: string;       // WHERE条件
-  explanation: string;
-}
-
 /**
  * 自然语言查询工具
  */
@@ -21,13 +15,8 @@ export class NLPQuery {
     this.config = config;
   }
 
-  async execute(query: string): Promise<NLResult> {
+  async execute(query: string) {
     const schema = this.config.rawContent ?? '';
-    const result = await this.llmManager.generateFilter(query, schema);
-    return {
-      sql: result.where,      // 兼容旧接口
-      where: result.where,
-      explanation: result.explanation
-    };
+    return this.llmManager.parseQuery(query, schema);
   }
 }
