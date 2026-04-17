@@ -15,8 +15,8 @@ export interface LabelData {
  * 标签项
  */
 export interface LabelItem {
-  condition: string;   // SQL条件
-  name: string;        // 显示名称
+  condition?: string;   // SQL条件（可选）
+  value: string;        // 字段引用或展示值
 }
 
 /**
@@ -34,6 +34,6 @@ export interface LabelQueryOptions {
 export interface MainLabelResult {
   labelId: string;     // 标签ID
   labelName: string;   // 标签名称
-  itemName: string;    // 标签项名称
-  condition: string;   // 匹配的SQL条件
+  itemValue: string;    // 标签项值
+  condition?: string;   // 匹配的SQL条件
 }

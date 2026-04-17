@@ -32,17 +32,22 @@ export interface DatabaseConfig {
  * 映射项
  */
 export interface MappingItem {
-  condition: string;   // SQL条件
-  name: string;        // 显示名称
+  condition?: string;  // 匹配条件
+  value: string;       // 字段引用或展示值
 }
 
 /**
  * 标签映射
+ * 支持两种模式：
+ * 1. items 模式：多个条件映射到不同值（互斥或可叠加）
+ * 2. value 模式：单个条件直接返回字段值
  */
 export interface LabelMapping {
   id: string;          // 标签唯一ID
   name: string;        // 标签类型名称
-  items: MappingItem[]; // 映射项数组
+  condition?: string;  // 前置条件（可选）
+  value?: string;      // 单一值（单值模式）或默认值（items 模式匹配不到时）
+  items?: MappingItem[]; // 映射项数组（多条件模式）
 }
 
 /**

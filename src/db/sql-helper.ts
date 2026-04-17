@@ -50,34 +50,70 @@ export class SqlHelper {
     // 构建label SELECT子句
     const clauses: string[] = [];
     for (const mapping of mappings || []) {
-      for (const item of mapping.items) {
-        if (item.name === '{field}') {
-          const fieldMatch = item.condition?.match(/\.(\w+)/);
-          if (fieldMatch) {
-            clauses.push(`${item.condition} AS ${mapping.id}`);
-          }
-          continue;
-        }
+      const id = mapping.id;
+      const items = mapping.items || [];
+      const prefixCondition = mapping.condition;  // 前置条件
+      const value = mapping.value;               // 单值模式的值或 items 模式的默认值
 
-        const fieldMatch = item.name.match(/\{(\w+)\}/);
-        if (fieldMatch) {
-          clauses.push(`${item.condition || fieldMatch[1]} AS ${mapping.id}`);
-          continue;
-        }
+      // 单值模式：有 value 且没有 items
+      if (value !== undefined && items.length === 0) {
+        const condition = prefixCondition || '1=1';
+        const isField = /^[dt]\.\w+$/.test(value);
+        const isNumber = /^\d+$/.test(value);
 
-        if (item.condition?.includes('{keyword}')) {
-          continue;
-        }
-
-        if (item.condition && item.condition !== 'all') {
-          const value = item.name.replace(/'/g, "''");
-          clauses.push(`CASE WHEN ${item.condition} THEN '${value}' END AS ${mapping.id}`);
+        let clause: string;
+        if (isField || isNumber) {
+          clause = `WHEN ${condition} THEN ${value}`;
         } else {
-          const value = item.name.replace(/'/g, "''");
-          clauses.push(`'${value}' AS ${mapping.id}`);
+          const safeValue = value.replace(/'/g, "''");
+          clause = `WHEN ${condition} THEN '${safeValue}'`;
         }
+        clauses.push(`CASE ${clause} END AS ${id}`);
+        continue;
+      }
+
+      // items 模式
+      if (items.length > 0 || value !== undefined) {
+        const whenClauses: string[] = [];
+
+        // 添加 items 的条件
+        for (const item of items) {
+          const itemValue = item.value;
+          const matchCondition = item.condition || '1=1';
+          const condition = prefixCondition 
+            ? `${prefixCondition} AND ${matchCondition}` 
+            : matchCondition;
+
+          // 自动推断：包含 . 为字段，数字为数值，其他为字符串
+          const isField = /^[dt]\.\w+$/.test(itemValue);
+          const isNumber = /^\d+$/.test(itemValue);
+
+          if (isField || isNumber) {
+            whenClauses.push(`WHEN ${condition} THEN ${itemValue}`);
+          } else {
+            const safeValue = itemValue.replace(/'/g, "''");
+            whenClauses.push(`WHEN ${condition} THEN '${safeValue}'`);
+          }
+        }
+
+        // 添加默认值作为最后一个 WHEN（仍然需要前置条件）
+        if (value !== undefined) {
+          const isField = /^[dt]\.\w+$/.test(value);
+          const isNumber = /^\d+$/.test(value);
+          const defaultCondition = prefixCondition || '1=1';
+          if (isField || isNumber) {
+            whenClauses.push(`WHEN ${defaultCondition} THEN ${value}`);
+          } else {
+            const safeValue = value.replace(/'/g, "''");
+            whenClauses.push(`WHEN ${defaultCondition} THEN '${safeValue}'`);
+          }
+        }
+
+        clauses.push(`CASE ${whenClauses.join(' ')} END AS ${id}`);
+        continue;
       }
     }
+
     this._labelSelectClause = `${mainAlias}.id${clauses.length > 0 ? ', ' + clauses.join(', ') : ''}`;
   }
 

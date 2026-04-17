@@ -32,7 +32,7 @@ export class LabelQuery {
       name: mapping.name,
       items: mapping.items.map(item => ({
         condition: item.condition,
-        name: item.name
+        value: item.value
       }))
     }));
 
@@ -73,8 +73,13 @@ export class LabelQuery {
     for (const mapping of this.config.mappings) {
       // 遍历标签的所有项
       for (const item of mapping.items) {
+        // 跳过纯字段标签（无 condition 或 condition 是字段引用）
+        if (!item.condition || item.value.includes('{keyword}')) {
+          continue;
+        }
+
         // 构建查询SQL
-        const sql = `SELECT * FROM ${this.config.database.tables[0].name} WHERE id = ? AND ${item.condition}`;
+        const sql = `SELECT * FROM ${this.config.database.tables[0].name} WHERE id = '${dataId}' AND ${item.condition}`;
         
         try {
           // 执行查询
@@ -85,7 +90,7 @@ export class LabelQuery {
             results.push({
               labelId: mapping.id,
               labelName: mapping.name,
-              itemName: item.name,
+              itemValue: item.value,
               condition: item.condition
             });
             // 每个标签只取第一个匹配的项
@@ -117,7 +122,7 @@ export class LabelQuery {
       name: mapping.name,
       items: mapping.items.map(item => ({
         condition: item.condition,
-        name: item.name
+        value: item.value
       }))
     };
   }
@@ -125,20 +130,20 @@ export class LabelQuery {
   /**
    * 转换标签为SQL条件
    * @param labelId 标签ID
-   * @param itemName 标签项名称
+   * @param itemValue 标签项值
    * @returns SQL条件
    */
-  getLabelCondition(labelId: string, itemName: string): string | null {
+  getLabelCondition(labelId: string, itemValue: string): string | null {
     const mapping = this.config.mappings.find(m => m.id === labelId);
     if (!mapping) {
       return null;
     }
 
-    const item = mapping.items.find(i => i.name === itemName);
+    const item = mapping.items.find(i => i.value === itemValue);
     if (!item) {
       return null;
     }
 
-    return item.condition;
+    return item.condition || null;
   }
 }
