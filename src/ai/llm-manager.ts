@@ -2,11 +2,8 @@
 
 import { LLM } from './types';
 
-interface FilterResult {
-  hasIntent: boolean;
-  where: string;
-  orderBy?: string;
-  limit?: number;
+export interface FilterResult {
+  sql: string;       // 完整SQL，如 SELECT * FROM ... WHERE ... ORDER BY ...
   explanation: string;
 }
 
@@ -22,22 +19,26 @@ export class LLMManager {
 
   /**
    * 解析自然语言查询意图
-   * 返回查询条件、排序、数量限制等片段
+   * 返回完整SQL语句
    */
   async parseQuery(naturalLanguageQuery: string, schema: string): Promise<FilterResult> {
-    const systemPrompt = `根据用户输入生成SQLite条件片段。
+    const systemPrompt = `你是一个SQL查询生成器。
 
-Schema:
+## 数据库Schema
 ${schema}
 
-输出JSON格式，包含以下字段：
-- hasIntent: 用户是否有查询意图，无查询意图时为 false
-- where: 筛选条件表达式，无筛选意图时为空字符串
-- orderBy: 排序表达式，无排序需求时为undefined
-- limit: 数量，无数量限制时为undefined
-- explanation: 解释where、orderBy、limit的内容，无查询意图时为空字符串
+## 任务
+根据用户输入，生成完整的SQL查询语句。
 
-请以JSON格式输出：`;
+## 输出格式
+严格输出JSON，字段说明：
+- sql: string — 完整SQL语句，以SELECT开头
+- explanation: string — 解释生成的查询
+
+## 示例
+用户输入：价格大于100的商品，按价格降序
+输出：
+{"sql":"SELECT * FROM products AS p WHERE p.price > 100 ORDER BY p.price DESC","explanation":"筛选价格大于100的记录，按价格降序排列"}`;
 
     const messages = [
       { role: 'system' as const, content: systemPrompt },
@@ -54,9 +55,9 @@ ${schema}
    * 兼容旧方法
    */
   async generateSQL(naturalLanguageQuery: string, schema: string): Promise<{ sql: string; explanation: string }> {
-    const { where, explanation } = await this.parseQuery(naturalLanguageQuery, schema);
+    const { sql, explanation } = await this.parseQuery(naturalLanguageQuery, schema);
     return {
-      sql: where,
+      sql,
       explanation
     };
   }

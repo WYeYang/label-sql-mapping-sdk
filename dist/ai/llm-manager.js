@@ -10,41 +10,42 @@ class LLMManager {
         this.llm = llm;
     }
     /**
-     * 生成筛选条件（WHERE子句）
-     * 只生成 WHERE 部分，SELECT 由程序拼接
+     * 解析自然语言查询意图
+     * 返回完整SQL语句
      */
-    async generateFilter(naturalLanguageQuery, schema) {
-        const systemPrompt = `根据用户输入生成SQLite条件片段。
+    async parseQuery(naturalLanguageQuery, schema) {
+        const systemPrompt = `你是一个SQL查询生成器。
 
-输出JSON格式，包含以下字段：
-- where: 筛选条件表达式，不含WHERE关键字
-- orderBy: 排序表达式如atk DESC，无排序需求时为undefined
-- limit: 数量，无数量限制时为undefined
-- explanation: 用户意图解释
+## 数据库Schema
+${schema}
 
-根据语义自行判断是否需要排序和数量限制。
+## 任务
+根据用户输入，生成完整的SQL查询语句。
 
-请以JSON格式输出：`;
+## 输出格式
+严格输出JSON，字段说明：
+- sql: string — 完整SQL语句，以SELECT开头
+- explanation: string — 解释生成的查询
+
+## 示例
+用户输入：价格大于100的商品，按价格降序
+输出：
+{"sql":"SELECT * FROM products AS p WHERE p.price > 100 ORDER BY p.price DESC","explanation":"筛选价格大于100的记录，按价格降序排列"}`;
         const messages = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Schema:\n${schema}\n\n查询: ${naturalLanguageQuery}` }
+            { role: 'user', content: `查询: ${naturalLanguageQuery}` }
         ];
         const response = await this.llm.chat(messages);
         const result = JSON.parse(response);
-        return {
-            where: result.where?.trim() || '',
-            orderBy: result.orderBy?.trim() || undefined,
-            limit: result.limit,
-            explanation: result.explanation?.trim() || ''
-        };
+        return result;
     }
     /**
      * 兼容旧方法
      */
     async generateSQL(naturalLanguageQuery, schema) {
-        const { where, explanation } = await this.generateFilter(naturalLanguageQuery, schema);
+        const { sql, explanation } = await this.parseQuery(naturalLanguageQuery, schema);
         return {
-            sql: where,
+            sql,
             explanation
         };
     }

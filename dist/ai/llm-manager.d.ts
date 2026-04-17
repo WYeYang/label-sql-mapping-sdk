@@ -1,4 +1,8 @@
 import { LLM } from './types';
+export interface FilterResult {
+    sql: string;
+    explanation: string;
+}
 /**
  * LLM Manager
  */
@@ -6,15 +10,10 @@ export declare class LLMManager {
     private llm;
     constructor(llm: LLM);
     /**
-     * 生成筛选条件（WHERE子句）
-     * 只生成 WHERE 部分，SELECT 由程序拼接
+     * 解析自然语言查询意图
+     * 返回完整SQL语句
      */
-    generateFilter(naturalLanguageQuery: string, schema: string): Promise<{
-        where: string;
-        orderBy?: string;
-        limit?: number;
-        explanation: string;
-    }>;
+    parseQuery(naturalLanguageQuery: string, schema: string): Promise<FilterResult>;
     /**
      * 兼容旧方法
      */

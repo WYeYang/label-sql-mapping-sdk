@@ -7,7 +7,7 @@ import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
 import { LLM } from './ai/types';
 import { AppConfigManager } from './config/app-config';
-import { SQLBuilder } from './db/sql-builder';
+import { SqlHelper, extractWhereAndAfter, hasLimit } from './db/sql-helper';
 
 dotenv.config();
 
@@ -26,7 +26,7 @@ export class LSMSDK {
   private readonly database;
   private readonly llmManager;
   private readonly nlpQuery;
-  private readonly sqlBuilder;
+  private readonly sqlHelper: SqlHelper;
   private inited = false;
 
   private constructor(
@@ -40,7 +40,7 @@ export class LSMSDK {
     this.database = DatabaseFactory.create(appConfigManager, this.lsmConfig);
     this.llmManager = new LLMManager(llm ?? new OpenAILLM(appConfigManager.getLLMConfig()));
     this.nlpQuery = new NLPQuery(this.llmManager, this.lsmConfig);
-    this.sqlBuilder = new SQLBuilder(this.lsmConfig);
+    this.sqlHelper = SqlHelper.create(this.lsmConfig);
   }
 
   static async fromAppConfig(appConfigPath: string, lsmConfigPath: string, llm?: LLM): Promise<LSMSDK> {
@@ -52,7 +52,6 @@ export class LSMSDK {
 
   /**
    * 自然语言查询
-   * AI只生成WHERE条件，SELECT由程序拼接
    */
   async query(options: {
     query?: string;
@@ -63,30 +62,41 @@ export class LSMSDK {
     const { query, sql, page = 1, pageSize = 20 } = options;
 
     let explanation: string | undefined;
-    let sqlStr = sql ?? '';
+    let fullSqlStr = sql ?? '';
 
     if (query) {
-      // 自然语言查询：AI生成WHERE条件
       const result = await this.nlpQuery.execute(query);
       explanation = result.explanation;
-      sqlStr = this.sqlBuilder.build(result.where, { orderBy: result.orderBy, limit: result.limit });
-    }
-
-    if (!sqlStr) {
+      fullSqlStr = result.sql;
+    } else if (sql) {
+      fullSqlStr = sql;
+    } else {
       throw new Error('请提供 query 或 sql 参数');
     }
 
+    if (!fullSqlStr.trim()) {
+      throw new Error('SQL不能为空');
+    }
+
+    const whereAndAfter = extractWhereAndAfter(fullSqlStr);
+    const offset = (page - 1) * pageSize;
+
     // 计数
-    const countSql = this.sqlBuilder.build(sqlStr, { count: true });
+    const countSql = this.sqlHelper.buildCountSql(whereAndAfter);
     const countResult = this.database.query(countSql);
     const total = countResult.rows[0]?.total || 0;
 
-    // 执行查询（最后拼接 labels）
-    const fullSql = this.sqlBuilder.build(sqlStr, { labels: true, limit: pageSize, offset: (page - 1) * pageSize });
-    const queryResult = this.database.query(fullSql);
+    // label查询
+    const labelSql = this.sqlHelper.buildLabelSql(
+      whereAndAfter,
+      hasLimit(fullSqlStr),
+      pageSize,
+      offset
+    );
+    const queryResult = this.database.query(labelSql);
 
     return {
-      sql: sqlStr,
+      sql: fullSqlStr,
       data: queryResult.rows,
       total,
       page,

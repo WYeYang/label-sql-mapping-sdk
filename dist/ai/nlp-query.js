@@ -12,12 +12,7 @@ class NLPQuery {
     }
     async execute(query) {
         const schema = this.config.rawContent ?? '';
-        const result = await this.llmManager.generateFilter(query, schema);
-        return {
-            sql: result.where, // 兼容旧接口
-            where: result.where,
-            explanation: result.explanation
-        };
+        return this.llmManager.parseQuery(query, schema);
     }
 }
 exports.NLPQuery = NLPQuery;
