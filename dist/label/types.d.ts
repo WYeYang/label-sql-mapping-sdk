@@ -10,8 +10,8 @@ export interface LabelData {
  * 标签项
  */
 export interface LabelItem {
-    condition: string;
-    name: string;
+    condition?: string;
+    value: string;
 }
 /**
  * 标签查询选项
@@ -27,7 +27,7 @@ export interface LabelQueryOptions {
 export interface MainLabelResult {
     labelId: string;
     labelName: string;
-    itemName: string;
-    condition: string;
+    itemValue: string;
+    condition?: string;
 }
 //# sourceMappingURL=types.d.ts.map

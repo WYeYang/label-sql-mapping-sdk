@@ -34,9 +34,9 @@ export declare class LabelQuery {
     /**
      * 转换标签为SQL条件
      * @param labelId 标签ID
-     * @param itemName 标签项名称
+     * @param itemValue 标签项值
      * @returns SQL条件
      */
-    getLabelCondition(labelId: string, itemName: string): string | null;
+    getLabelCondition(labelId: string, itemValue: string): string | null;
 }
 //# sourceMappingURL=label-query.d.ts.map

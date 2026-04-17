@@ -74,7 +74,7 @@ function validateConfig(config: any): void {
     throw new Error('缺少mappings字段或格式不正确');
   }
   
-  // 验证每个映射项
+  // 验证每个映射项 - 支持单值模式(value+condition)和完整模式(items)
   config.mappings.forEach((mapping: any, index: number) => {
     if (!mapping.id) {
       throw new Error(`第${index + 1}个映射缺少id字段`);
@@ -84,7 +84,13 @@ function validateConfig(config: any): void {
       throw new Error(`第${index + 1}个映射缺少name字段`);
     }
     
-    if (!mapping.items || !Array.isArray(mapping.items)) {
+    // 单值模式：只有 value 和/或 condition，没有 items
+    const hasValue = 'value' in mapping;
+    const hasCondition = 'condition' in mapping;
+    const hasItems = mapping.items && Array.isArray(mapping.items);
+    
+    // 必须有 items 数组，或者至少有 value/condition（单值模式）
+    if (!hasItems && !(hasValue || hasCondition)) {
       throw new Error(`第${index + 1}个映射缺少items字段或格式不正确`);
     }
   });

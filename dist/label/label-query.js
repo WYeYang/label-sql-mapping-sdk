@@ -21,14 +21,29 @@ class LabelQuery {
      * @returns 标签数据列表
      */
     async getLabels(options = {}) {
-        let labels = this.config.mappings.map(mapping => ({
-            id: mapping.id,
-            name: mapping.name,
-            items: mapping.items.map(item => ({
-                condition: item.condition,
-                name: item.name
-            }))
-        }));
+        // 适配新旧配置格式：新格式支持 items 或 value+condition
+        let labels = this.config.mappings.map(mapping => {
+            // 如果有 items，使用 items
+            if (mapping.items && mapping.items.length > 0) {
+                return {
+                    id: mapping.id,
+                    name: mapping.name,
+                    items: mapping.items.map(item => ({
+                        condition: item.condition,
+                        value: item.value
+                    }))
+                };
+            }
+            // 否则使用 value（单值模式）
+            return {
+                id: mapping.id,
+                name: mapping.name,
+                items: [{
+                        condition: mapping.condition,
+                        value: mapping.value || ''
+                    }]
+            };
+        });
         // 应用过滤
         if (options.filter) {
             const filter = options.filter.toLowerCase();
@@ -59,10 +74,19 @@ class LabelQuery {
         const results = [];
         // 遍历所有标签
         for (const mapping of this.config.mappings) {
+            // 获取标签项列表（适配新旧格式）
+            const items = mapping.items && mapping.items.length > 0
+                ? mapping.items
+                : mapping.value ? [{ condition: mapping.condition, value: mapping.value }]
+                    : [];
             // 遍历标签的所有项
-            for (const item of mapping.items) {
+            for (const item of items) {
+                // 跳过纯字段标签（无 condition 或 condition 是字段引用）
+                if (!item.condition || item.value.includes('{keyword}')) {
+                    continue;
+                }
                 // 构建查询SQL
-                const sql = `SELECT * FROM ${this.config.database.tables[0].name} WHERE id = ? AND ${item.condition}`;
+                const sql = `SELECT * FROM ${this.config.database.tables[0].name} WHERE id = '${dataId}' AND ${item.condition}`;
                 try {
                     // 执行查询
                     const queryResult = await this.database.query(sql);
@@ -71,7 +95,7 @@ class LabelQuery {
                         results.push({
                             labelId: mapping.id,
                             labelName: mapping.name,
-                            itemName: item.name,
+                            itemValue: item.value,
                             condition: item.condition
                         });
                         // 每个标签只取第一个匹配的项
@@ -96,31 +120,41 @@ class LabelQuery {
         if (!mapping) {
             return null;
         }
+        // 获取标签项列表（适配新旧格式）
+        const items = mapping.items && mapping.items.length > 0
+            ? mapping.items
+            : mapping.value ? [{ condition: mapping.condition, value: mapping.value }]
+                : [];
         return {
             id: mapping.id,
             name: mapping.name,
-            items: mapping.items.map(item => ({
+            items: items.map(item => ({
                 condition: item.condition,
-                name: item.name
+                value: item.value
             }))
         };
     }
     /**
      * 转换标签为SQL条件
      * @param labelId 标签ID
-     * @param itemName 标签项名称
+     * @param itemValue 标签项值
      * @returns SQL条件
      */
-    getLabelCondition(labelId, itemName) {
+    getLabelCondition(labelId, itemValue) {
         const mapping = this.config.mappings.find(m => m.id === labelId);
         if (!mapping) {
             return null;
         }
-        const item = mapping.items.find(i => i.name === itemName);
+        // 获取标签项列表（适配新旧格式）
+        const items = mapping.items && mapping.items.length > 0
+            ? mapping.items
+            : mapping.value ? [{ condition: mapping.condition, value: mapping.value }]
+                : [];
+        const item = items.find(i => i.value === itemValue);
         if (!item) {
             return null;
         }
-        return item.condition;
+        return item.condition || null;
     }
 }
 exports.LabelQuery = LabelQuery;

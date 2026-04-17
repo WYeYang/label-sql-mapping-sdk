@@ -40,6 +40,35 @@ const path = __importStar(require("path"));
 const yaml = __importStar(require("yaml"));
 const index_1 = require("./index");
 let instance = null;
+/** 自动查找配置文件 */
+function findConfig(dir, names) {
+    for (const name of names) {
+        const p = path.join(dir, name);
+        if (fs.existsSync(p))
+            return p;
+    }
+    return null;
+}
+/** 从 node_modules 查找 lsm 配置文件 */
+function findInModules(startDir) {
+    let dir = startDir;
+    while (dir !== path.dirname(dir)) {
+        const nodeModules = path.join(dir, 'node_modules');
+        if (fs.existsSync(nodeModules)) {
+            // 查找 lsm-* 前缀的包
+            const entries = fs.readdirSync(nodeModules, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory() && entry.name.startsWith('lsm-')) {
+                    const config = findConfig(path.join(nodeModules, entry.name), ['lsm.yaml', 'lsm.yml']);
+                    if (config)
+                        return config;
+                }
+            }
+        }
+        dir = path.dirname(dir);
+    }
+    return null;
+}
 class AppConfigManager {
     constructor(appConfigPath, lsmConfigPath) {
         this.appConfigPath = appConfigPath;
@@ -48,10 +77,17 @@ class AppConfigManager {
         this.lsmConfig = null;
     }
     static getInstance(appConfigPath, lsmConfigPath) {
-        if (!instance) {
-            instance = new AppConfigManager(appConfigPath, lsmConfigPath);
-            instance.load();
-        }
+        if (instance)
+            return instance;
+        const configDir = path.dirname(lsmConfigPath);
+        // 查找优先级：命令行传入 > config目录 > node_modules
+        let foundLsmPath = appConfigPath !== lsmConfigPath ? appConfigPath : null;
+        if (!foundLsmPath)
+            foundLsmPath = findConfig(configDir, ['lsm.yaml', 'lsm.yml']);
+        if (!foundLsmPath)
+            foundLsmPath = findInModules(configDir);
+        instance = new AppConfigManager(foundLsmPath || appConfigPath, lsmConfigPath);
+        instance.load();
         return instance;
     }
     load() {
@@ -62,12 +98,17 @@ class AppConfigManager {
         this.lsmConfig = (0, index_1.parseConfig)(this.lsmConfigPath);
     }
     getDatabasePath() {
-        const dbPath = this.appConfig?.database?.path;
+        // 优先从 LSM config 读取
+        let dbPath = this.lsmConfig?.database?.path;
+        // 其次从 app config 读取
         if (!dbPath) {
-            throw new Error('错误: 请在应用配置文件中配置数据库文件路径');
+            dbPath = this.appConfig?.database?.path;
+        }
+        if (!dbPath) {
+            throw new Error('错误: 请在配置文件中配置数据库文件路径');
         }
         if (!path.isAbsolute(dbPath)) {
-            const configDir = path.dirname(this.appConfigPath);
+            const configDir = path.dirname(this.lsmConfigPath);
             return path.resolve(configDir, dbPath);
         }
         return dbPath;

@@ -20,22 +20,28 @@ export interface TableConfig {
  */
 export interface DatabaseConfig {
     type: DatabaseType;
+    path?: string;
     tables: TableConfig[];
 }
 /**
  * 映射项
  */
 export interface MappingItem {
-    condition: string;
-    name: string;
+    condition?: string;
+    value: string;
 }
 /**
  * 标签映射
+ * 支持两种模式：
+ * 1. items 模式：多个条件映射到不同值（互斥或可叠加）
+ * 2. value 模式：单个条件直接返回字段值
  */
 export interface LabelMapping {
     id: string;
     name: string;
-    items: MappingItem[];
+    condition?: string;
+    value?: string;
+    items?: MappingItem[];
 }
 /**
  * LSM 配置
