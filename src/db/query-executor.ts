@@ -1,7 +1,7 @@
 // 查询执行器
 
 import { Database, DBQueryResult } from '../db';
-import { SqlHelper, extractWhereAndAfter, hasLimit } from './sql-helper';
+import { SqlHelper, extractWhereAndAfter, hasLimit, replaceLimit } from './sql-helper';
 import type { ExtensionMapping } from '../config';
 import type { ExtensionValue } from './types';
 import { QueryResult } from './types';
@@ -39,7 +39,9 @@ export class QueryExecutor {
    * 执行查询
    */
   execute(fullSqlStr: string, page: number, pageSize: number, mode: QueryMode = 'list', aiExtensions?: AIExtensions[]): QueryExecResult {
-    const whereAndAfter = extractWhereAndAfter(fullSqlStr);
+    // AI 返回的 LIMIT 如果大于 pageSize，替换成 pageSize
+    const normalizedSql = replaceLimit(fullSqlStr, pageSize);
+    const whereAndAfter = extractWhereAndAfter(normalizedSql);
 
     // 第一次 SQL：count
     const countSql = this.sqlHelper.buildCountSql(whereAndAfter);
@@ -85,7 +87,7 @@ export class QueryExecutor {
       : `SELECT ${mainSelect} FROM ${fromClause} ${whereAndAfter}`;
 
     const offset = (page - 1) * pageSize;
-    const querySql = hasLimit(fullSqlStr) ? baseSql : `${baseSql} LIMIT ${pageSize} OFFSET ${offset}`;
+    const querySql = hasLimit(normalizedSql) ? baseSql : `${baseSql} LIMIT ${pageSize} OFFSET ${offset}`;
 
     const queryResult: DBQueryResult = this.database.query(querySql);
 

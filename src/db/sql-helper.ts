@@ -15,6 +15,26 @@ export function extractWhereAndAfter(sql: string): string {
 export const hasLimit = (sql: string) => /\bLIMIT\b/i.test(sql);
 
 /**
+ * 提取 SQL 中的 LIMIT 值
+ */
+export function extractLimit(sql: string): number | null {
+  const match = sql.match(/\bLIMIT\s+(\d+)/i);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/**
+ * 如果 AI 返回的 LIMIT 大于 pageSize，替换成 pageSize
+ */
+export function replaceLimit(sql: string, pageSize: number): string {
+  if (!hasLimit(sql)) return sql;
+  const limit = extractLimit(sql);
+  if (limit !== null && limit > pageSize) {
+    return sql.replace(/\bLIMIT\s+\d+/i, `LIMIT ${pageSize}`);
+  }
+  return sql;
+}
+
+/**
  * 将 WHERE 条件追加到 SQL 末尾
  */
 export function appendWhereCondition(sql: string, condition: string): string {
