@@ -26,15 +26,16 @@ export class LSMSDK {
   private inited = false;
 
   private constructor(
-    lsmConfigPath: string,
-    llm?: LLM
+    configPath: string,
+    lsmPath?: string
   ) {
-    const appConfigManager = AppConfigManager.new(lsmConfigPath);
+    const appConfigManager = AppConfigManager.new(configPath, lsmPath);
     const lsmConfig = appConfigManager.getLSMConfig();
     const extensions = appConfigManager.getExtensions();
-
+    const llm = appConfigManager.getLLMConfig();
+    
     this.database = DatabaseFactory.create(appConfigManager, lsmConfig);
-    this.llmManager = new LLMManager(llm ?? new OpenAILLM(appConfigManager.getLLMConfig()));
+    this.llmManager = new LLMManager(new OpenAILLM(llm));
     this.nlpQuery = new NLPQuery(this.llmManager, lsmConfig);
     
     const sqlHelper = SqlHelper.create(lsmConfig);
@@ -43,8 +44,13 @@ export class LSMSDK {
     this.extMerger = new ExtensionMerger(extensions);
   }
 
-  static async fromAppConfig(lsmConfigPath: string, llm?: LLM): Promise<LSMSDK> {
-    const sdk = new LSMSDK(lsmConfigPath, llm);
+  /**
+   * 从配置文件创建 SDK 实例
+   * @param configPath 主配置文件路径（如 main.yaml）或 lsm-* 包名（如 'lsm-ygopro-database'）
+   * @param lsmPath llm 配置文件路径（如 lsm.yaml），不传则自动查找
+   */
+  static async fromAppConfig(configPath: string, lsmPath?: string): Promise<LSMSDK> {
+    const sdk = new LSMSDK(configPath, lsmPath);
     await sdk.database.init();
     sdk.inited = true;
     return sdk;
