@@ -45,8 +45,8 @@ ${extSimplifiedText}
 
 ## 重要提示
 - mappings中的id和name不是数据库字段名，它们只是标签
-- 数值类查询：value字段是字段引用，直接用这个字段自行推导条件
-- items类型：直接用condition作为WHERE条件
+- 有items的mapping：直接用condition作为WHERE条件
+- 无items的mapping：value字段是字段引用，自行推导条件
 
 ## 任务
 根据用户输入，生成完整的SQL查询语句。
