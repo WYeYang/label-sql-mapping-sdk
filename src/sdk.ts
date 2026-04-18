@@ -9,7 +9,7 @@ import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
 import { LLM } from './ai/types';
 import { AppConfigManager } from './config/app-config';
-import { SqlHelper } from './db/sql-helper';
+import { SqlHelper, appendWhereCondition } from './db/sql-helper';
 import { QueryResult } from './db/types';
 
 dotenv.config();
@@ -22,11 +22,11 @@ export { LLM } from './ai/types';
  * SDK 配置选项
  */
 export interface LSMSDKOptions {
-  /** main.yaml 路径、lsm-* 包名，或不传（自动查找） */
+  /** labels.yaml 路径、lsm-* 包名，或不传（自动查找） */
   configPath?: string;
-  /** lsm.yaml 路径，可选（不传则自动向上查找） */
-  lsmPath?: string;
-  /** 自定义 LLM，可选（不传则从 lsm.yaml 读取） */
+  /** lsm-sdk-js.yaml 路径，可选（不传则自动向上查找） */
+  sdkConfigPath?: string;
+  /** 自定义 LLM，可选（不传则从 lsm-sdk-js.yaml 读取） */
   llm?: LLM;
 }
 
@@ -38,8 +38,8 @@ export class LSMSDK {
   private readonly extMerger: ExtensionMerger;
 
   constructor(options?: LSMSDKOptions) {
-    const appConfigManager = AppConfigManager.new(options?.configPath, options?.lsmPath);
-    const lsmConfig = appConfigManager.getLSMConfig();
+    const appConfigManager = AppConfigManager.new(options?.configPath, options?.sdkConfigPath);
+    const labelsConfig = appConfigManager.getLabelsConfig();
     const extensions = appConfigManager.getExtensions();
     
     let llm: LLM;
@@ -47,16 +47,16 @@ export class LSMSDK {
       // 使用传入的 LLM
       llm = options.llm;
     } else {
-      // 从 lsm.yaml 读取 LLM 配置
+      // 从 lsm-sdk-js.yaml 读取 LLM 配置
       const llmConfig = appConfigManager.getLLMConfig();
       llm = new OpenAILLM(llmConfig);
     }
     
-    this.database = DatabaseFactory.create(appConfigManager, lsmConfig);
+    this.database = DatabaseFactory.create(appConfigManager, labelsConfig);
     this.llmManager = new LLMManager(llm);
-    this.nlpQuery = new NLPQuery(this.llmManager, lsmConfig);
+    this.nlpQuery = new NLPQuery(this.llmManager, labelsConfig);
     
-    const sqlHelper = SqlHelper.create(lsmConfig);
+    const sqlHelper = SqlHelper.create(labelsConfig);
     sqlHelper.setExtensions(extensions);
     this.queryExecutor = new QueryExecutor(this.database, sqlHelper, extensions);
     this.extMerger = new ExtensionMerger(extensions);
@@ -100,7 +100,7 @@ export class LSMSDK {
     // 根据 extensions 构建 WHERE 条件并拼接到 SQL
     const whereCondition = this.extMerger.buildWhereConditions(aiExtensions);
     if (whereCondition) {
-      fullSqlStr = this.appendWhereCondition(fullSqlStr, whereCondition);
+      fullSqlStr = appendWhereCondition(fullSqlStr, whereCondition);
     }
 
     if (!fullSqlStr.trim()) {
@@ -114,23 +114,5 @@ export class LSMSDK {
       sql: fullSqlStr,
       explanation
     };
-  }
-
-  /**
-   * 将 WHERE 条件追加到 SQL 末尾
-   */
-  private appendWhereCondition(sql: string, condition: string): string {
-    const normalizedSql = sql.trim();
-    const upperSql = normalizedSql.toUpperCase();
-    
-    if (upperSql.includes('WHERE')) {
-      // 已有 WHERE，添加 AND 条件
-      const beforeWhere = normalizedSql.substring(0, normalizedSql.toUpperCase().indexOf('WHERE') + 5);
-      const afterWhere = normalizedSql.substring(normalizedSql.toUpperCase().indexOf('WHERE') + 5);
-      return `${beforeWhere} ${afterWhere.trim()} AND ${condition}`;
-    } else {
-      // 没有 WHERE，直接添加
-      return `${normalizedSql} WHERE ${condition}`;
-    }
   }
 }

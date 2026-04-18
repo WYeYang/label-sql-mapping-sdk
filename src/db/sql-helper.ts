@@ -14,6 +14,24 @@ export function extractWhereAndAfter(sql: string): string {
 /** 判断SQL是否包含LIMIT */
 export const hasLimit = (sql: string) => /\bLIMIT\b/i.test(sql);
 
+/**
+ * 将 WHERE 条件追加到 SQL 末尾
+ */
+export function appendWhereCondition(sql: string, condition: string): string {
+  const normalizedSql = sql.trim();
+  const upperSql = normalizedSql.toUpperCase();
+  
+  if (upperSql.includes('WHERE')) {
+    // 已有 WHERE，添加 AND 条件
+    const beforeWhere = normalizedSql.substring(0, normalizedSql.toUpperCase().indexOf('WHERE') + 5);
+    const afterWhere = normalizedSql.substring(normalizedSql.toUpperCase().indexOf('WHERE') + 5);
+    return `${beforeWhere} ${afterWhere.trim()} AND ${condition}`;
+  } else {
+    // 没有 WHERE，直接添加
+    return `${normalizedSql} WHERE ${condition}`;
+  }
+}
+
 /** SQL转义：字段引用原样输出，字符串值加引号 */
 const esc = (v: string) => v.includes('.') ? v : `'${v.replace(/'/g, "''")}'`;
 

@@ -9,6 +9,7 @@ export class SQLiteDatabase implements IDatabase {
   private db: DatabaseType;
 
   constructor(config: DBConfig) {
+    console.log('[SQLiteDatabase] config.path:', config.path);
     if (!config.path) {
       throw new Error('SQLite数据库路径不能为空');
     }

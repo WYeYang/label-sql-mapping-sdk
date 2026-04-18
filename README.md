@@ -34,23 +34,23 @@ npm install lsm-xxx-database
 
 **方式 B：指定配置文件路径**
 
-创建配置文件夹（包含 main.yaml、数据库、extensions）：
+创建配置文件夹（包含 labels.yaml、数据库、extensions）：
 
 ```bash
 # 项目结构
 my-project/
 ├── lsm-products-config/      # 配置文件夹
-│   ├── main.yaml             # 主配置
+│   ├── labels.yaml           # 标签配置
 │   ├── products.db           # 数据库文件
 │   └── extensions/           # 扩展标签（可选）
-└── lsm.yaml                  # LLM 配置
+└── lsm-sdk-js.yaml           # SDK 配置
 ```
 
-### 3. 配置 lsm.yaml
+### 3. 配置 lsm-sdk-js.yaml
 
-> **提示**：如果调用方已配置其他 LLM，则无需配置 `lsm.yaml`，传入现有 LLM 即可使用自然语言查询，避免重复配置 API。
+> **提示**：如果调用方已配置其他 LLM，则无需配置 `lsm-sdk-js.yaml`，传入现有 LLM 即可使用自然语言查询，避免重复配置 API。
 
-在项目根目录创建 `lsm.yaml` 文件（用于自然语言查询）：
+在项目根目录创建 `lsm-sdk-js.yaml` 文件（用于自然语言查询）：
 
 **项目结构：**
 
@@ -60,13 +60,13 @@ my-project/
 │   ├── label-sql-mapping-sdk/  # LSM SDK（npm 安装）
 │   └── lsm-xxx-database/       # lsm-* 配置包（npm 安装，二选一）
 ├── lsm-products-config/        # 自定义配置（手动创建，二选一）
-│   ├── main.yaml               # 主配置
+│   ├── labels.yaml             # 标签配置
 │   ├── products.db             # 数据库文件
 │   └── extensions/             # 扩展标签（可选）
-└── lsm.yaml                    # LLM 配置（项目根目录）
+└── lsm-sdk-js.yaml             # SDK 配置（项目根目录）
 ```
 
-**lsm.yaml 结构：**
+**lsm-sdk-js.yaml 结构：**
 
 必须是 OpenAI 规范的 API，支持 OpenAI、阿里通义、DeepSeek 等兼容服务：
 
@@ -87,7 +87,7 @@ llm:
 | `llm.temperature` | 否 | 温度参数，默认 `0.7` |
 | `llm.maxTokens` | 否 | 最大 token 数，默认 `1000` |
 
-> **提示**：如果传入 `llm` 参数创建 SDK，则无需配置 `lsm.yaml`，LLM 配置会使用传入的实现。
+> **提示**：如果传入 `llm` 参数创建 SDK，则无需配置 `lsm-sdk-js.yaml`，LLM 配置会使用传入的实现。
 
 ## 使用
 
@@ -101,10 +101,10 @@ const sdk = new LSMSDK();
 const sdk = new LSMSDK({ configPath: 'lsm-xxx-database' });
 
 // 指定配置文件路径
-const sdk = new LSMSDK({ configPath: './lsm-products-config/main.yaml' });
+const sdk = new LSMSDK({ configPath: './lsm-products-config/labels.yaml' });
 
 // 传入自定义 LLM
-const sdk = new LSMSDK({ configPath: './lsm-products-config/main.yaml', llm: customLLM });
+const sdk = new LSMSDK({ configPath: './lsm-products-config/labels.yaml', llm: customLLM });
 
 // 自然语言查询（自动初始化数据库）
 const result = await sdk.query({ query: '价格大于1000的商品' });
@@ -134,11 +134,11 @@ const sdk = new LSMSDK({ configPath: './config', llm: customLLM });
 
 | 文件 | 说明 |
 |------|------|
-| `main.yaml` | 直接路径 或 `node_modules/lsm-*/main.yaml` |
-| `lsm.yaml` | 指定路径；未指定则从 `node_modules` 上级目录向上查找 |
-| `extensions/` | 从 main.yaml 同级 `extensions/` 目录加载 |
+| `labels.yaml` | 直接路径 或 `node_modules/lsm-*/labels.yaml` |
+| `lsm-sdk-js.yaml` | 指定路径；未指定则从 `node_modules` 上级目录向上查找 |
+| `extensions/` | 从 labels.yaml 同级 `extensions/` 目录加载 |
 
-### main.yaml
+### labels.yaml
 
 定义数据库连接和标签映射：
 
@@ -196,9 +196,9 @@ items:
 
 ```typescript
 interface LSMSDKOptions {
-  configPath?: string;  // main.yaml 路径、lsm-* 包名，或不传（自动查找）
-  lsmPath?: string;     // lsm.yaml 路径，可选（不传则自动向上查找）
-  llm?: LLM;            // 自定义 LLM，可选
+  configPath?: string;      // labels.yaml 路径、lsm-* 包名，或不传（自动查找）
+  sdkConfigPath?: string;    // lsm-sdk-js.yaml 路径，可选（不传则自动向上查找）
+  llm?: LLM;                 // 自定义 LLM，可选
 }
 ```
 
@@ -249,23 +249,23 @@ lsm-cli -c lsm-xxx-database -q "价格大于100的产品"
 # ...
 
 # 指定配置文件路径
-lsm-cli -c ./config/main.yaml -q "价格大于100的产品"
+lsm-cli -c ./config/labels.yaml -q "价格大于100的产品"
 # Total: 50 | Page 1/3
 # ...
 
 # SQL 查询
-lsm-cli -c ./config/main.yaml -s "SELECT * FROM products WHERE id < 10"
+lsm-cli -c ./config/labels.yaml -s "SELECT * FROM products WHERE id < 10"
 # Total: 10 | Page 1/1
 # SQL: SELECT * FROM products WHERE id < 10
 # ...
 
 # 分页
-lsm-cli -c ./config/main.yaml -q "电子产品" -p 2 -ps 10
+lsm-cli -c ./config/labels.yaml -q "电子产品" -p 2 -ps 10
 # Total: 100 | Page 2/10
 # ...
 
 # 输出 JSON
-lsm-cli -c ./config/main.yaml -q "价格大于100的产品" --json
+lsm-cli -c ./config/labels.yaml -q "价格大于100的产品" --json
 # {"data":[...],"total":50,...}
 ```
 

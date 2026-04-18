@@ -8,23 +8,14 @@ import { LSMConfig, parseConfig, processConfigDefaults, MappingItem } from './in
 
 let instance: AppConfigManager | null = null;
 
-/** 自动查找配置文件 */
-function findConfig(dir: string, names: string[]): string | null {
-  for (const name of names) {
-    const p = path.join(dir, name);
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
-
-/** 从目录链查找 lsm 配置文件 */
-function findLsmConfig(startDir: string): string | null {
+/** 从目录链查找 SDK 配置文件 (lsm-sdk-js.yaml) */
+function findSDKConfig(startDir: string): string | null {
   let dir = startDir;
   while (dir !== path.dirname(dir)) {
-    const lsmPath = path.join(dir, 'lsm.yaml');
-    if (fs.existsSync(lsmPath)) return lsmPath;
-    const lsmYmlPath = path.join(dir, 'lsm.yml');
-    if (fs.existsSync(lsmYmlPath)) return lsmYmlPath;
+    const sdkPath = path.join(dir, 'lsm-sdk-js.yaml');
+    if (fs.existsSync(sdkPath)) return sdkPath;
+    const sdkYmlPath = path.join(dir, 'lsm-sdk-js.yml');
+    if (fs.existsSync(sdkYmlPath)) return sdkYmlPath;
     dir = path.dirname(dir);
   }
   return null;
@@ -43,10 +34,10 @@ function findLsmPackage(startDir: string, packageName?: string): string | null {
         const packagePath = path.join(nodeModules, packageName);
         if (fs.existsSync(packagePath)) return packagePath;
       } else {
-        // 不指定包名，返回第一个包含 main.yaml 的 lsm-* 包
+        // 不指定包名，返回第一个包含 labels.yaml 的 lsm-* 包
         const entries = fs.readdirSync(nodeModules);
         for (const name of entries) {
-          if (name.startsWith('lsm-') && fs.existsSync(path.join(nodeModules, name, 'main.yaml'))) {
+          if (name.startsWith('lsm-') && fs.existsSync(path.join(nodeModules, name, 'labels.yaml'))) {
             return path.join(nodeModules, name);
           }
         }
@@ -68,26 +59,25 @@ export interface ExtensionMapping {
 }
 
 export class AppConfigManager {
-  private appConfig: Record<string, any> | null = null;
-  private lsmConfig: LSMConfig | null = null;
+  private labelsConfig: LSMConfig | null = null;
   private extensions: Map<string, ExtensionMapping> = new Map();
   private extensionsLoaded = false;
   private extensionsSimplifiedText: string | null = null;
 
   private constructor(
-    public readonly appConfigPath: string,
-    public readonly lsmConfigPath: string
+    public readonly labelsPath: string,
+    public readonly sdkConfigPath: string
   ) {
     this.load();
   }
 
   /**
    * 创建新实例
-   * @param configPath main.yaml: 文件路径、'lsm'（自动查找）或 lsm-* 包名
-   * @param lsmPath lsm.yaml: 文件路径，可选（不传则从 main.yaml 目录向上查找）
+   * @param configPath labels.yaml: 文件路径、'lsm'（自动查找）或 lsm-* 包名
+   * @param sdkConfigPath lsm-sdk-js.yaml: 文件路径，可选（不传则从 labels.yaml 目录向上查找）
    */
-  static new(configPath?: string, lsmPath?: string): AppConfigManager {
-    let mainYamlPath: string;
+  static new(configPath?: string, sdkConfigPath?: string): AppConfigManager {
+    let labelsYamlPath: string;
     let packagePath: string | null = null;
     
     if (!configPath) {
@@ -97,12 +87,12 @@ export class AppConfigManager {
         throw new Error('找不到 lsm-* 包，请先安装，如: npm install lsm-xxx');
       }
       packagePath = found;
-      mainYamlPath = path.join(packagePath, 'main.yaml');
+      labelsYamlPath = path.join(packagePath, 'labels.yaml');
     } else if (/[\/\\]|\.ya?ml$/.test(configPath)) {
       // 文件路径
-      mainYamlPath = path.resolve(configPath);
-      if (!fs.existsSync(mainYamlPath)) {
-        throw new Error(`找不到 main.yaml: ${mainYamlPath}`);
+      labelsYamlPath = path.resolve(configPath);
+      if (!fs.existsSync(labelsYamlPath)) {
+        throw new Error(`找不到 labels.yaml: ${labelsYamlPath}`);
       }
     } else {
       // 当作包名查找
@@ -111,34 +101,29 @@ export class AppConfigManager {
         throw new Error(`找不到 lsm-* 包: ${configPath}`);
       }
       packagePath = found;
-      mainYamlPath = path.join(packagePath, 'main.yaml');
+      labelsYamlPath = path.join(packagePath, 'labels.yaml');
     }
     
-    // 查找 lsm.yaml
-    let lsmYamlPath: string | null = null;
+    // 查找 lsm-sdk-js.yaml
+    let sdkConfigYamlPath: string | null = null;
     
-    if (lsmPath) {
+    if (sdkConfigPath) {
       // 参数指定路径
-      lsmYamlPath = fs.existsSync(lsmPath) ? path.resolve(lsmPath) : null;
+      sdkConfigYamlPath = fs.existsSync(sdkConfigPath) ? path.resolve(sdkConfigPath) : null;
     } else if (packagePath) {
       // 从 node_modules 上级向上查找
       const searchDir = path.dirname(path.dirname(packagePath));
-      lsmYamlPath = findLsmConfig(searchDir);
+      sdkConfigYamlPath = findSDKConfig(searchDir);
     } else {
-      // 从 main.yaml 所在目录向上查找
-      const searchDir = path.dirname(mainYamlPath);
-      lsmYamlPath = findLsmConfig(searchDir);
+      // 从 labels.yaml 所在目录向上查找
+      const searchDir = path.dirname(labelsYamlPath);
+      sdkConfigYamlPath = findSDKConfig(searchDir);
     }
     
-    console.log(`[AppConfig] main.yaml: ${mainYamlPath}`);
-    console.log(`[AppConfig] lsm.yaml: ${lsmYamlPath}`);
+    console.log(`[AppConfig] labels.yaml: ${labelsYamlPath}`);
+    console.log(`[AppConfig] lsm-sdk-js.yaml: ${sdkConfigYamlPath}`);
     
-    // 如果没找到 lsm.yaml，使用 main.yaml
-    if (!lsmYamlPath || !fs.existsSync(lsmYamlPath)) {
-      lsmYamlPath = mainYamlPath;
-    }
-    
-    instance = new AppConfigManager(mainYamlPath, lsmYamlPath);
+    instance = new AppConfigManager(labelsYamlPath, sdkConfigYamlPath || labelsYamlPath);
     return instance;
   }
 
@@ -153,11 +138,11 @@ export class AppConfigManager {
   }
 
   private load(): void {
-    // 解析 main.yaml
-    if (fs.existsSync(this.appConfigPath)) {
-      const content = fs.readFileSync(this.appConfigPath, 'utf8');
-      this.appConfig = yaml.parse(content);
-      this.lsmConfig = processConfigDefaults(this.appConfig);
+    // 解析 labels.yaml
+    if (fs.existsSync(this.labelsPath)) {
+      const content = fs.readFileSync(this.labelsPath, 'utf8');
+      const parsed = yaml.parse(content);
+      this.labelsConfig = processConfigDefaults(parsed);
     }
   }
 
@@ -168,8 +153,8 @@ export class AppConfigManager {
   private loadExtensions(): void {
     if (this.extensionsLoaded) return;
 
-    // 扩展配置从 main.yaml 同级目录加载
-    const extDir = path.join(path.dirname(this.appConfigPath), 'extensions');
+    // 扩展配置从 labels.yaml 同级目录加载
+    const extDir = path.join(path.dirname(this.labelsPath), 'extensions');
     
     if (!fs.existsSync(extDir)) {
       this.extensionsLoaded = true;
@@ -204,34 +189,33 @@ export class AppConfigManager {
   }
 
   getDatabasePath(): string {
-    // 优先从 LSM config 读取
-    let dbPath = this.lsmConfig?.database?.path;
-    // 其次从 app config 读取
-    if (!dbPath) {
-      dbPath = this.appConfig?.database?.path;
+    if (!this.labelsConfig) {
+      throw new Error('标签配置未初始化');
     }
+    let dbPath = this.labelsConfig.database?.path;
     if (!dbPath) {
-      throw new Error('错误: 请在配置文件中配置数据库文件路径');
+      throw new Error('错误: 请在 labels.yaml 中配置数据库文件路径');
     }
     if (!path.isAbsolute(dbPath)) {
-      const configDir = path.dirname(this.lsmConfigPath);
+      // 从 labels.yaml 所在目录解析相对路径
+      const configDir = path.dirname(this.labelsPath);
       return path.resolve(configDir, dbPath);
     }
     return dbPath;
   }
 
   getLLMConfig(): LLMConfig {
-    // 从 lsm.yaml 中查找 llm 配置
-    if (!fs.existsSync(this.lsmConfigPath)) {
-      throw new Error('错误: 找不到 lsm.yaml 配置文件');
+    // 从 lsm-sdk-js.yaml 中查找 llm 配置
+    if (!fs.existsSync(this.sdkConfigPath)) {
+      throw new Error('错误: 找不到 lsm-sdk-js.yaml 配置文件');
     }
     
-    const lsmContent = fs.readFileSync(this.lsmConfigPath, 'utf8');
-    const lsmParsed = yaml.parse(lsmContent);
-    const llmConfig = lsmParsed?.llm;
+    const sdkContent = fs.readFileSync(this.sdkConfigPath, 'utf8');
+    const sdkParsed = yaml.parse(sdkContent);
+    const llmConfig = sdkParsed?.llm;
     
     if (!llmConfig) {
-      throw new Error('错误: 请在 lsm.yaml 中配置 LLM');
+      throw new Error('错误: 请在 lsm-sdk-js.yaml 中配置 LLM');
     }
 
     const apiKey = process.env.OPENAI_API_KEY || llmConfig.apiKey;
@@ -257,18 +241,18 @@ export class AppConfigManager {
     };
   }
 
-  getLSMConfig(): LSMConfig {
-    if (!this.lsmConfig) {
-      throw new Error('LSM 配置未初始化');
+  getLabelsConfig(): LSMConfig {
+    if (!this.labelsConfig) {
+      throw new Error('标签配置未初始化');
     }
-    return this.lsmConfig;
+    return this.labelsConfig;
   }
 
   /**
    * 获取配置目录
    */
   getConfigDir(): string {
-    return path.dirname(this.lsmConfigPath);
+    return path.dirname(this.labelsPath);
   }
 
   /**
