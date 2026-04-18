@@ -30,18 +30,16 @@ function findLsmConfig(startDir: string): string | null {
   return null;
 }
 
-/** 从 node_modules 查找 lsm 配置文件 */
-function findInModules(startDir: string): string | null {
+/** 从 node_modules 查找 lsm-* 包路径 */
+function findLsmPackage(startDir: string): string | null {
   let dir = startDir;
   while (dir !== path.dirname(dir)) {
     const nodeModules = path.join(dir, 'node_modules');
     if (fs.existsSync(nodeModules)) {
-      // 查找 lsm-* 前缀的包
       const entries = fs.readdirSync(nodeModules, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isDirectory() && entry.name.startsWith('lsm-')) {
-          const config = findConfig(path.join(nodeModules, entry.name), ['lsm.yaml', 'lsm.yml']);
-          if (config) return config;
+          return path.join(nodeModules, entry.name);
         }
       }
     }
@@ -76,24 +74,36 @@ export class AppConfigManager {
 
   /**
    * 创建新实例（会自动查找配置文件）
-   * @param lsmConfigPath 主配置文件路径（如 main.yaml）
+   * @param lsmConfigPath 主配置文件路径（如 main.yaml）或 lsm-* 包名
    */
   static new(lsmConfigPath: string): AppConfigManager {
-    const configDir = path.dirname(lsmConfigPath);
+    let configDir = path.dirname(lsmConfigPath);
+    let mainYamlPath = lsmConfigPath;
+    
+    // 如果传入的是包名（如 'lsm-ygopro-database'），查找对应的 node_modules 路径
+    if (!fs.existsSync(lsmConfigPath)) {
+      const packagePath = findLsmPackage(process.cwd());
+      if (packagePath) {
+        configDir = packagePath;
+        // 查找 main.yaml
+        const mainPath = path.join(packagePath, 'main.yaml');
+        if (fs.existsSync(mainPath)) {
+          mainYamlPath = mainPath;
+        }
+      }
+    }
     
     // 查找 llm 配置文件（lsm.yaml）：
     // 1. 先在目录链上查找
     // 2. 再从 node_modules 查找
     let appConfigPath = findLsmConfig(configDir);
-    if (!appConfigPath) appConfigPath = findInModules(configDir);
     
     // 如果没找到 lsm.yaml，使用主配置文件作为 appConfig
     if (!appConfigPath) {
-      appConfigPath = lsmConfigPath;
+      appConfigPath = mainYamlPath;
     }
     
-    // lsmConfigPath 保持传入的路径（main.yaml）
-    instance = new AppConfigManager(appConfigPath, lsmConfigPath);
+    instance = new AppConfigManager(appConfigPath, mainYamlPath);
     return instance;
   }
 
