@@ -44,10 +44,10 @@ function findLsmPackage(startDir: string, packageName?: string): string | null {
         if (fs.existsSync(packagePath)) return packagePath;
       } else {
         // 不指定包名，返回第一个找到的包
-        const entries = fs.readdirSync(nodeModules, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory() && entry.name.startsWith('lsm-')) {
-            return path.join(nodeModules, entry.name);
+        const entries = fs.readdirSync(nodeModules);
+        for (const name of entries) {
+          if (name.startsWith('lsm-')) {
+            return path.join(nodeModules, name);
           }
         }
       }
@@ -83,16 +83,23 @@ export class AppConfigManager {
 
   /**
    * 创建新实例（会自动查找配置文件）
-   * @param configPath 配置文件路径（如 main.yaml）或 lsm-* 包名（如 'lsm-ygopro-database'）
+   * @param configPath 配置文件路径（如 main.yaml）或 'lsm'（自动查找任意lsm-*包）
    * @param lsmConfigPath 可选，llm 配置文件路径（如 lsm.yaml），不传则自动查找
    */
   static new(configPath: string, lsmConfigPath?: string): AppConfigManager {
     let configDir: string;
     let mainYamlPath: string;
     
-    // 判断是包名还是文件路径
-    if (!fs.existsSync(configPath)) {
-      // 包名模式：在 node_modules 中查找指定包
+    // 'lsm' 是特殊值，表示自动查找任意 lsm-* 包
+    if (configPath === 'lsm') {
+      const packagePath = findLsmPackage(process.cwd());
+      if (!packagePath) {
+        throw new Error('找不到 lsm-* 包，请先安装，如: npm install lsm-xxx');
+      }
+      configDir = packagePath;
+      mainYamlPath = path.join(packagePath, 'main.yaml');
+    } else if (!fs.existsSync(configPath)) {
+      // 其他非文件路径，当作包名查找
       const packagePath = findLsmPackage(process.cwd(), configPath);
       if (!packagePath) {
         throw new Error(`找不到 lsm 包: ${configPath}`);

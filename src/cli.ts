@@ -12,8 +12,7 @@ program
   .name('lsm-cli')
   .description('Label-SQL Mapping CLI - Query database with natural language or SQL')
   .version(pkg.version)
-  .requiredOption('-c, --config <path>', 'Path to LSM config YAML file')
-  .option('-l, --lsm <path>', 'Path to LSM app config (default: same as -c)')
+  .option('-c, --config <path>', 'Path to lsm.yaml (LLM config), default: auto find upward')
   .option('-q, --query <text>', 'Natural language query')
   .option('-s, --sql <sql>', 'Raw SQL query')
   .option('-p, --page <number>', 'Page number', '1')
@@ -24,13 +23,11 @@ program.parse();
 
 const opts = program.opts();
 
-// lsmConfigPath: 数据库配置
-const lsmConfigPath = path.resolve(opts.config);
-// appConfigPath: LLM配置，没传时与lsmConfigPath相同
-const appConfigPath = opts.lsm ? path.resolve(opts.lsm) : lsmConfigPath;
+// 如果没传 -c，默认使用 'lsm'（会自动向上查找）
+const configPath = opts.config || 'lsm';
 
 async function main() {
-  const sdk = await LSMSDK.fromAppConfig(lsmConfigPath);
+  const sdk = await LSMSDK.fromAppConfig(configPath);
   const result = await sdk.query({
     query: opts.query,
     sql: opts.sql,
