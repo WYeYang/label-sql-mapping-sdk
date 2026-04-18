@@ -47,24 +47,12 @@ export interface ExtensionMapping {
   items: MappingItem[];  // 映射项数组
 }
 
-/**
- * 简化的扩展标签（用于传给 AI，只包含 values 不含 condition）
- */
-export interface ExtensionSimplified {
-  id: string;
-  name: string;
-  description?: string;
-  values: string[];
-}
-
 export class AppConfigManager {
   private appConfig: Record<string, any> | null = null;
   private lsmConfig: LSMConfig | null = null;
   private extensions: Map<string, ExtensionMapping> = new Map();
   private extensionsLoaded = false;
-  private extensionsSimplified: ExtensionSimplified[] | null = null;
   private extensionsSimplifiedText: string | null = null;
-  private extensionsRawContent: string | null = null;
 
   private constructor(
     public readonly appConfigPath: string,
@@ -220,37 +208,6 @@ export class AppConfigManager {
   }
 
   /**
-   * 获取扩展标签的原始 YAML 内容（缓存）
-   */
-  getExtensionsRawContent(): string {
-    if (this.extensionsRawContent) {
-      return this.extensionsRawContent;
-    }
-
-    const extDir = path.join(path.dirname(this.lsmConfigPath), 'extensions');
-    if (!fs.existsSync(extDir)) {
-      this.extensionsRawContent = '';
-      return '';
-    }
-
-    const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-    const contents: string[] = [];
-
-    for (const file of files) {
-      const filePath = path.join(extDir, file);
-      try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        contents.push(`### ${file}\n\`\`\`yaml\n${content}\n\`\`\``);
-      } catch (err) {
-        console.error(`[AppConfigManager] Failed to read ${file}:`, err);
-      }
-    }
-
-    this.extensionsRawContent = contents.join('\n\n');
-    return this.extensionsRawContent;
-  }
-
-  /**
    * 获取所有扩展标签
    */
   getExtensions(): ExtensionMapping[] {
@@ -267,49 +224,6 @@ export class AppConfigManager {
   }
 
   /**
-   * 根据关键词搜索扩展标签
-   */
-  searchExtensions(keywords: string): ExtensionMapping[] {
-    if (!this.extensionsLoaded) this.loadExtensions();
-    
-    if (!keywords) {
-      return this.getExtensions();
-    }
-
-    const lower = keywords.toLowerCase();
-    return this.getExtensions().filter(ext => {
-      const matchName = ext.name.toLowerCase().includes(lower);
-      const matchDesc = ext.description?.toLowerCase().includes(lower);
-      const matchId = ext.id.toLowerCase().includes(lower);
-      const matchItems = ext.items.some(item => 
-        item.value?.toLowerCase().includes(lower)
-      );
-      return matchName || matchDesc || matchId || matchItems;
-    });
-  }
-
-  /**
-   * 获取简化的扩展标签（只包含 id, name, description, values，不含 condition）
-   * 用于传给 AI，仅提取一次并缓存
-   */
-  getExtensionsSimplified(): ExtensionSimplified[] {
-    if (this.extensionsSimplified) {
-      return this.extensionsSimplified;
-    }
-
-    if (!this.extensionsLoaded) this.loadExtensions();
-
-    this.extensionsSimplified = Array.from(this.extensions.values()).map(ext => ({
-      id: ext.id,
-      name: ext.name,
-      description: ext.description,
-      values: ext.items.map(item => item.value).filter((v): v is string => !!v)
-    }));
-
-    return this.extensionsSimplified;
-  }
-
-  /**
    * 获取简化的扩展标签文本格式
    * 用于直接传给 AI，缓存结果
    */
@@ -318,8 +232,15 @@ export class AppConfigManager {
       return this.extensionsSimplifiedText;
     }
 
-    const simplified = this.getExtensionsSimplified();
-    
+    if (!this.extensionsLoaded) this.loadExtensions();
+
+    const simplified = Array.from(this.extensions.values()).map(ext => ({
+      id: ext.id,
+      name: ext.name,
+      description: ext.description,
+      values: ext.items.map(item => item.value).filter((v): v is string => !!v)
+    }));
+
     this.extensionsSimplifiedText = simplified.map(ext => {
       const lines = [
         `id: ${ext.id}`,
