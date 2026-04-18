@@ -45,21 +45,16 @@ ${schema}
 ## extensions 扩展标签配置
 ${extSimplifiedText}
 
-## 重要提示
-- extensions配置是独立的标签系统，通过extensions字段返回，不要直接拼接到SQL中
-- 有items的mapping：item.condition是完整的WHERE条件片段，直接引用
-- 无items的mapping：AI根据condition的参考意义自行推导WHERE条件
-- 匹配优先级：先检查extensions/labels是否有对应标签，有则通过extensions返回且SQL中不要用LIKE重复过滤；只有extensions没匹配到时才能用LIKE等方法自行推导SQL条件
+## 处理规则
+1. extensions的item.condition会自动拼接为WHERE条件，返回匹配的标签ID和值即可，SQL中不要重复写
+2. labels有items时，item.condition直接拼接到SQL；无items时根据condition含义自行推导
+3. 优先使用extensions/labels匹配，匹配不到时再用LIKE自行推导
 
-## 任务
-根据用户输入，生成完整的SQL查询语句。
-
-## 输出格式
-直接输出JSON对象，结构如下：
+## 输出格式（JSON）
 {
-  "sql": "完整SQL语句，以SELECT开头",
-  "explanation": "解释生成的查询",
-  "extensions": [{"id": "extensions配置中的标签ID", "values": ["匹配到的标签值列表，这些值会在SQL外通过位运算等条件过滤"]}]
+  "sql": "完整SQL语句（SELECT开头，不含extensions条件）",
+  "explanation": "查询说明",
+  "extensions": [{"id": "标签ID", "values": ["匹配的值"]}]
 }`;
 
     const messages = [
