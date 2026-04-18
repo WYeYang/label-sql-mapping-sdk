@@ -83,36 +83,31 @@ export class AppConfigManager {
 
   /**
    * 创建新实例
-   * @param configPath main.yaml: 'lsm'（自动查找）或 lsm-* 包名或文件路径
+   * @param configPath main.yaml: 'lsm'（自动查找）或 lsm-* 包名
    * @param lsmPath lsm.yaml: 可选，文件路径，不传则自动向上查找
    */
   static new(configPath: string, lsmPath?: string): AppConfigManager {
-    let configDir: string;
-    let mainYamlPath: string;
+    let packagePath: string;
     
-    // 'lsm' 是特殊值，表示自动查找任意 lsm-* 包
+    // 'lsm' 表示自动查找任意 lsm-* 包
     if (configPath === 'lsm') {
-      const packagePath = findLsmPackage(process.cwd());
-      if (!packagePath) {
+      const found = findLsmPackage(process.cwd());
+      if (!found) {
         throw new Error('找不到 lsm-* 包，请先安装，如: npm install lsm-xxx');
       }
-      configDir = path.dirname(path.dirname(packagePath)); // node_modules 的父目录
-      mainYamlPath = path.join(packagePath, 'main.yaml');
-    } else if (!fs.existsSync(configPath)) {
-      // 其他非文件路径，当作包名查找
-      const packagePath = findLsmPackage(process.cwd(), configPath);
-      if (!packagePath) {
+      packagePath = found;
+    } else {
+      // 当作包名查找
+      const found = findLsmPackage(process.cwd(), configPath);
+      if (!found) {
         throw new Error(`找不到 lsm-* 包: ${configPath}`);
       }
-      configDir = path.dirname(path.dirname(packagePath)); // node_modules 的父目录
-      mainYamlPath = path.join(packagePath, 'main.yaml');
-    } else {
-      // 文件路径模式
-      configDir = path.dirname(configPath);
-      mainYamlPath = configPath;
+      packagePath = found;
     }
     
-    // 查找 lsm.yaml（只支持路径，不支持包名）
+    const mainYamlPath = path.join(packagePath, 'main.yaml');
+    
+    // 查找 lsm.yaml（只支持路径）
     let appConfigPath: string | null = null;
     
     if (lsmPath) {
@@ -122,17 +117,15 @@ export class AppConfigManager {
     
     if (!appConfigPath) {
       // 自动向上查找
-      appConfigPath = findLsmConfig(configDir);
+      const searchDir = path.dirname(path.dirname(packagePath)); // node_modules 的父目录
+      appConfigPath = findLsmConfig(searchDir);
     }
     
     if (!appConfigPath) {
-      // 在 node_modules 的 lsm-* 包中查找
-      const lsmPackage = findLsmPackage(configDir);
-      if (lsmPackage) {
-        const pkgLsmPath = path.join(lsmPackage, 'lsm.yaml');
-        if (fs.existsSync(pkgLsmPath)) {
-          appConfigPath = pkgLsmPath;
-        }
+      // 在当前包的目录查找
+      const pkgLsmPath = path.join(packagePath, 'lsm.yaml');
+      if (fs.existsSync(pkgLsmPath)) {
+        appConfigPath = pkgLsmPath;
       }
     }
     

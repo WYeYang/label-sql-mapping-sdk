@@ -11,7 +11,7 @@ program
   .name('lsm-cli')
   .description('Label-SQL Mapping CLI - Query database with natural language or SQL')
   .version(pkg.version)
-  .option('-c, --config <name|path>', 'main.yaml: lsm-* package name or file path (default: auto find)')
+  .option('-c, --config <name>', 'main.yaml: lsm-* package name (default: auto find)')
   .option('-l, --lsm <path>', 'lsm.yaml path (default: auto find upward)')
   .option('-q, --query <text>', 'Natural language query')
   .option('-s, --sql <sql>', 'Raw SQL query')
