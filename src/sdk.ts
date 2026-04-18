@@ -85,6 +85,12 @@ export class LSMSDK {
       throw new Error('请提供 query 或 sql 参数');
     }
 
+    // 根据 extensions 构建 WHERE 条件并拼接到 SQL
+    const whereCondition = this.extMerger.buildWhereConditions(aiExtensions);
+    if (whereCondition) {
+      fullSqlStr = this.appendWhereCondition(fullSqlStr, whereCondition);
+    }
+
     if (!fullSqlStr.trim()) {
       throw new Error('SQL不能为空');
     }
@@ -96,5 +102,23 @@ export class LSMSDK {
       sql: fullSqlStr,
       explanation
     };
+  }
+
+  /**
+   * 将 WHERE 条件追加到 SQL 末尾
+   */
+  private appendWhereCondition(sql: string, condition: string): string {
+    const normalizedSql = sql.trim();
+    const upperSql = normalizedSql.toUpperCase();
+    
+    if (upperSql.includes('WHERE')) {
+      // 已有 WHERE，添加 AND 条件
+      const beforeWhere = normalizedSql.substring(0, normalizedSql.toUpperCase().indexOf('WHERE') + 5);
+      const afterWhere = normalizedSql.substring(normalizedSql.toUpperCase().indexOf('WHERE') + 5);
+      return `${beforeWhere} ${afterWhere.trim()} AND ${condition}`;
+    } else {
+      // 没有 WHERE，直接添加
+      return `${normalizedSql} WHERE ${condition}`;
+    }
   }
 }

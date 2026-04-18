@@ -52,6 +52,26 @@ export class ExtensionMerger {
   }
 
   /**
+   * 根据 extensions 构建 WHERE 条件
+   * 返回形如 "(condition1) OR (condition2)" 的条件
+   */
+  buildWhereConditions(extensions: ExtensionInfo[]): string {
+    if (!extensions.length) return '';
+    const conditions: string[] = [];
+    for (const ext of extensions) {
+      const extMapping = this.extensions.find(e => e.id === ext.id);
+      if (!extMapping) continue;
+      for (const value of ext.values) {
+        const item = extMapping.items.find(i => i.value === value);
+        if (item?.condition) {
+          conditions.push(`(${item.condition})`);
+        }
+      }
+    }
+    return conditions.length ? conditions.join(' OR ') : '';
+  }
+
+  /**
    * 获取所有扩展标签配置
    */
   getExtensions(): ExtensionMapping[] {

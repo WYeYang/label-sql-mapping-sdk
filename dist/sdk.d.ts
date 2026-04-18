@@ -29,5 +29,9 @@ export declare class LSMSDK {
         mode?: QueryMode;
         extensions?: string[];
     }): Promise<QueryResult>;
+    /**
+     * 将 WHERE 条件追加到 SQL 末尾
+     */
+    private appendWhereCondition;
 }
 //# sourceMappingURL=sdk.d.ts.map
