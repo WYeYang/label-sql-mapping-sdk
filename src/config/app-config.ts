@@ -129,6 +129,9 @@ export class AppConfigManager {
       }
     }
     
+    console.log(`[AppConfig] main.yaml: ${mainYamlPath}`);
+    console.log(`[AppConfig] lsm.yaml: ${appConfigPath}`);
+    
     // 如果没找到 lsm.yaml，使用 main.yaml
     if (!appConfigPath || !fs.existsSync(appConfigPath)) {
       appConfigPath = mainYamlPath;
