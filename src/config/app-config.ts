@@ -31,7 +31,7 @@ function findLsmConfig(startDir: string): string | null {
 }
 
 /** 从目录链查找 lsm-* 包路径
- * @param packageName 可选，指定包名（如 'lsm-ygopro-database'），不指定则返回第一个找到的包
+ * @param packageName 可选，指定包名（如 'lsm-xxx'），不指定则返回第一个找到的包
  */
 function findLsmPackage(startDir: string, packageName?: string): string | null {
   let dir = startDir;
