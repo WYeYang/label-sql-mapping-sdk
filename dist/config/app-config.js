@@ -77,9 +77,7 @@ class AppConfigManager {
         this.lsmConfig = null;
         this.extensions = new Map();
         this.extensionsLoaded = false;
-        this.extensionsSimplified = null;
         this.extensionsSimplifiedText = null;
-        this.extensionsRawContent = null;
         this.load();
     }
     /**
@@ -214,33 +212,6 @@ class AppConfigManager {
         return path.dirname(this.lsmConfigPath);
     }
     /**
-     * 获取扩展标签的原始 YAML 内容（缓存）
-     */
-    getExtensionsRawContent() {
-        if (this.extensionsRawContent) {
-            return this.extensionsRawContent;
-        }
-        const extDir = path.join(path.dirname(this.lsmConfigPath), 'extensions');
-        if (!fs.existsSync(extDir)) {
-            this.extensionsRawContent = '';
-            return '';
-        }
-        const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-        const contents = [];
-        for (const file of files) {
-            const filePath = path.join(extDir, file);
-            try {
-                const content = fs.readFileSync(filePath, 'utf-8');
-                contents.push(`### ${file}\n\`\`\`yaml\n${content}\n\`\`\``);
-            }
-            catch (err) {
-                console.error(`[AppConfigManager] Failed to read ${file}:`, err);
-            }
-        }
-        this.extensionsRawContent = contents.join('\n\n');
-        return this.extensionsRawContent;
-    }
-    /**
      * 获取所有扩展标签
      */
     getExtensions() {
@@ -257,42 +228,6 @@ class AppConfigManager {
         return this.extensions.get(id);
     }
     /**
-     * 根据关键词搜索扩展标签
-     */
-    searchExtensions(keywords) {
-        if (!this.extensionsLoaded)
-            this.loadExtensions();
-        if (!keywords) {
-            return this.getExtensions();
-        }
-        const lower = keywords.toLowerCase();
-        return this.getExtensions().filter(ext => {
-            const matchName = ext.name.toLowerCase().includes(lower);
-            const matchDesc = ext.description?.toLowerCase().includes(lower);
-            const matchId = ext.id.toLowerCase().includes(lower);
-            const matchItems = ext.items.some(item => item.value?.toLowerCase().includes(lower));
-            return matchName || matchDesc || matchId || matchItems;
-        });
-    }
-    /**
-     * 获取简化的扩展标签（只包含 id, name, description, values，不含 condition）
-     * 用于传给 AI，仅提取一次并缓存
-     */
-    getExtensionsSimplified() {
-        if (this.extensionsSimplified) {
-            return this.extensionsSimplified;
-        }
-        if (!this.extensionsLoaded)
-            this.loadExtensions();
-        this.extensionsSimplified = Array.from(this.extensions.values()).map(ext => ({
-            id: ext.id,
-            name: ext.name,
-            description: ext.description,
-            values: ext.items.map(item => item.value).filter((v) => !!v)
-        }));
-        return this.extensionsSimplified;
-    }
-    /**
      * 获取简化的扩展标签文本格式
      * 用于直接传给 AI，缓存结果
      */
@@ -300,7 +235,14 @@ class AppConfigManager {
         if (this.extensionsSimplifiedText) {
             return this.extensionsSimplifiedText;
         }
-        const simplified = this.getExtensionsSimplified();
+        if (!this.extensionsLoaded)
+            this.loadExtensions();
+        const simplified = Array.from(this.extensions.values()).map(ext => ({
+            id: ext.id,
+            name: ext.name,
+            description: ext.description,
+            values: ext.items.map(item => item.value).filter((v) => !!v)
+        }));
         this.extensionsSimplifiedText = simplified.map(ext => {
             const lines = [
                 `id: ${ext.id}`,

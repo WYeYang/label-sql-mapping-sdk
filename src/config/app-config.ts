@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
 import { LLMConfig } from '../ai';
-import { LSMConfig, parseConfig, MappingItem, ExtensionValue } from './index';
+import { LSMConfig, parseConfig, MappingItem } from './index';
 
 let instance: AppConfigManager | null = null;
 

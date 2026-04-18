@@ -18,14 +18,6 @@ export interface DBQueryResult {
 }
 
 /**
- * 扩展标签值
- */
-export interface ExtensionValue {
-  name: string;     // 标签名
-  values: string[]; // 值列表
-}
-
-/**
  * SDK 统一查询结果
  */
 export interface QueryResult {
@@ -36,7 +28,6 @@ export interface QueryResult {
   pageSize: number;
   totalPages: number;
   explanation?: string;
-  extensions?: Record<string, ExtensionValue>;
 }
 
 /**

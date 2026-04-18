@@ -15,24 +15,26 @@ class LLMManager {
      * 返回完整SQL语句
      */
     async parseQuery(naturalLanguageQuery, schema) {
-        // 获取扩展标签原始内容
-        const extRawContent = app_config_1.AppConfigManager.get().getExtensionsRawContent();
+        // 获取扩展标签简化配置
+        const extSimplifiedText = app_config_1.AppConfigManager.get().getExtensionsSimplifiedText();
         const systemPrompt = `你是一个SQL查询生成器。
 
 ## 数据库Schema
 ${schema}
 
 ## 扩展标签配置
-${extRawContent}
+${extSimplifiedText}
 
 ## 任务
 根据用户输入，生成完整的SQL查询语句。
 
 ## 输出格式
-严格输出JSON，字段说明：
-- sql: string — 完整SQL语句，以SELECT开头
-- explanation: string — 解释生成的查询
-- extensions: Array<{id: string, values: string[]}> — 用户需要的扩展标签，id为标签ID，values为匹配的值（与配置中items的value字段对应）`;
+直接输出JSON对象，结构如下：
+{
+  "sql": "完整SQL语句，以SELECT开头",
+  "explanation": "解释生成的查询",
+  "extensions": [{"id": "扩展标签的ID（来自扩展标签配置）", "values": ["用户需要的标签值，用于额外的标签查询，不是SQL的组成部分"]}]
+}`;
         const messages = [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `查询: ${naturalLanguageQuery}` }

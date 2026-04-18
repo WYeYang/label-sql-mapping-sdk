@@ -117,21 +117,6 @@ export class SqlHelper {
   }
 
   /**
-   * 从行数据中提取扩展标签
-   */
-  extractExtensions(rows: any[]): Record<string, string[]> {
-    const result: Record<string, string[]> = {};
-    for (const ext of this._extensions) {
-      const matched = new Set<string>();
-      for (const row of rows) {
-        if (row[ext.id]) matched.add(row[ext.id]);
-      }
-      if (matched.size > 0) result[ext.id] = Array.from(matched);
-    }
-    return result;
-  }
-
-  /**
    * 从行数据中排除扩展标签字段
    */
   excludeExtensions(row: any): any {

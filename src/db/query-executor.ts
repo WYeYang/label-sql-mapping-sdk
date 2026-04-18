@@ -3,12 +3,12 @@
 import { Database, DBQueryResult } from '../db';
 import { SqlHelper, extractWhereAndAfter, hasLimit } from './sql-helper';
 import type { ExtensionMapping } from '../config';
-import { ExtensionValue, QueryResult } from './types';
+import { QueryResult } from './types';
 
 /**
- * 查询执行器返回结果（不含 sql 和 explanation）
+ * 查询执行器返回结果
  */
-type QueryExecResult = Pick<QueryResult, 'data' | 'total' | 'page' | 'pageSize' | 'totalPages' | 'extensions'>;
+type QueryExecResult = Pick<QueryResult, 'data' | 'total' | 'page' | 'pageSize' | 'totalPages'>;
 
 /**
  * 查询执行器
@@ -54,25 +54,12 @@ export class QueryExecutor {
 
     const queryResult: DBQueryResult = this.database.query(querySql);
 
-    // 提取扩展标签
-    const extensions: Record<string, ExtensionValue> = {};
-    if (extMappings.length) {
-      const extracted = this.sqlHelper.extractExtensions(queryResult.rows);
-      for (const ext of extMappings) {
-        const values = extracted[ext.id];
-        if (values?.length) {
-          extensions[ext.name] = { name: ext.name, values };
-        }
-      }
-    }
-
     return { 
       data: queryResult.rows, 
       total, 
       page, 
       pageSize, 
-      totalPages: Math.ceil(total / pageSize),
-      extensions: Object.keys(extensions).length ? extensions : undefined
+      totalPages: Math.ceil(total / pageSize)
     };
   }
 }
