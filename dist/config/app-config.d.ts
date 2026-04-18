@@ -26,6 +26,8 @@ export declare class AppConfigManager {
     private extensions;
     private extensionsLoaded;
     private extensionsSimplified;
+    private extensionsSimplifiedText;
+    private extensionsRawContent;
     private constructor();
     /**
      * 创建新实例（会自动查找配置文件）
@@ -38,6 +40,9 @@ export declare class AppConfigManager {
     private load;
     /**
      * 加载扩展标签配置
+     * 支持两种格式：
+     * 1. 有 items 的格式：items: [{condition, value}]
+     * 2. 只有 values 的格式：values: ["value1", "value2"]
      */
     private loadExtensions;
     getDatabasePath(): string;
@@ -48,7 +53,7 @@ export declare class AppConfigManager {
      */
     getConfigDir(): string;
     /**
-     * 获取扩展标签的原始 YAML 内容
+     * 获取扩展标签的原始 YAML 内容（缓存）
      */
     getExtensionsRawContent(): string;
     /**
@@ -70,7 +75,7 @@ export declare class AppConfigManager {
     getExtensionsSimplified(): ExtensionSimplified[];
     /**
      * 获取简化的扩展标签文本格式
-     * 用于直接传给 AI
+     * 用于直接传给 AI，缓存结果
      */
     getExtensionsSimplifiedText(): string;
 }

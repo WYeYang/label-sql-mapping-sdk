@@ -63,6 +63,8 @@ export class AppConfigManager {
   private extensions: Map<string, ExtensionMapping> = new Map();
   private extensionsLoaded = false;
   private extensionsSimplified: ExtensionSimplified[] | null = null;
+  private extensionsSimplifiedText: string | null = null;
+  private extensionsRawContent: string | null = null;
 
   private constructor(
     public readonly appConfigPath: string,
@@ -104,6 +106,9 @@ export class AppConfigManager {
 
   /**
    * 加载扩展标签配置
+   * 支持两种格式：
+   * 1. 有 items 的格式：items: [{condition, value}]
+   * 2. 只有 values 的格式：values: ["value1", "value2"]
    */
   private loadExtensions(): void {
     if (this.extensionsLoaded) return;
@@ -127,11 +132,23 @@ export class AppConfigManager {
             id: parsed.id,
             name: parsed.name || parsed.id,
             description: parsed.description,
-            items: (parsed.items || []).map((item: any) => ({
+            items: []
+          };
+
+          // 兼容两种格式
+          if (parsed.items && Array.isArray(parsed.items)) {
+            // 格式1: items: [{condition, value}]
+            ext.items = parsed.items.map((item: any) => ({
               condition: item.condition,
               value: item.value
-            }))
-          };
+            }));
+          } else if (parsed.values && Array.isArray(parsed.values)) {
+            // 格式2: values: ["value1", "value2"]
+            ext.items = parsed.values.map((v: string) => ({
+              value: v
+            }));
+          }
+
           this.extensions.set(ext.id, ext);
         }
       } catch (err) {
@@ -203,11 +220,18 @@ export class AppConfigManager {
   }
 
   /**
-   * 获取扩展标签的原始 YAML 内容
+   * 获取扩展标签的原始 YAML 内容（缓存）
    */
   getExtensionsRawContent(): string {
+    if (this.extensionsRawContent) {
+      return this.extensionsRawContent;
+    }
+
     const extDir = path.join(path.dirname(this.lsmConfigPath), 'extensions');
-    if (!fs.existsSync(extDir)) return '';
+    if (!fs.existsSync(extDir)) {
+      this.extensionsRawContent = '';
+      return '';
+    }
 
     const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
     const contents: string[] = [];
@@ -222,7 +246,8 @@ export class AppConfigManager {
       }
     }
 
-    return contents.join('\n\n');
+    this.extensionsRawContent = contents.join('\n\n');
+    return this.extensionsRawContent;
   }
 
   /**
@@ -286,12 +311,16 @@ export class AppConfigManager {
 
   /**
    * 获取简化的扩展标签文本格式
-   * 用于直接传给 AI
+   * 用于直接传给 AI，缓存结果
    */
   getExtensionsSimplifiedText(): string {
+    if (this.extensionsSimplifiedText) {
+      return this.extensionsSimplifiedText;
+    }
+
     const simplified = this.getExtensionsSimplified();
     
-    return simplified.map(ext => {
+    this.extensionsSimplifiedText = simplified.map(ext => {
       const lines = [
         `id: ${ext.id}`,
         `name: ${ext.name}`,
@@ -300,5 +329,7 @@ export class AppConfigManager {
       ].filter(Boolean);
       return lines.join('\n');
     }).join('\n\n');
+
+    return this.extensionsSimplifiedText;
   }
 }
