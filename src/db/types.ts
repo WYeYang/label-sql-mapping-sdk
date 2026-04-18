@@ -11,17 +11,39 @@ export interface DBConfig {
 }
 
 /**
- * 查询结果
+ * 数据库查询结果（原始）
+ */
+export interface DBQueryResult {
+  rows: any[];           // 查询结果行
+}
+
+/**
+ * 扩展标签值
+ */
+export interface ExtensionValue {
+  name: string;     // 标签名
+  values: string[]; // 值列表
+}
+
+/**
+ * SDK 统一查询结果
  */
 export interface QueryResult {
-  rows: any[];           // 查询结果行
+  sql: string;
+  data: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  explanation?: string;
+  extensions?: Record<string, ExtensionValue>;
 }
 
 /**
  * 数据库操作接口
  */
 export interface Database {
-  query(sql: string): QueryResult;
+  query(sql: string): DBQueryResult;
   close(): void;
   getType(): DatabaseType;
   init(): Promise<void>;

@@ -30,7 +30,7 @@ const lsmConfigPath = path.resolve(opts.config);
 const appConfigPath = opts.lsm ? path.resolve(opts.lsm) : lsmConfigPath;
 
 async function main() {
-  const sdk = await LSMSDK.fromAppConfig(appConfigPath, lsmConfigPath);
+  const sdk = await LSMSDK.fromAppConfig(lsmConfigPath);
   const result = await sdk.query({
     query: opts.query,
     sql: opts.sql,

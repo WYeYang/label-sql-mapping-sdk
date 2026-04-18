@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
 import { LLMConfig } from '../ai';
-import { LSMConfig, parseConfig } from './index';
+import { LSMConfig, parseConfig, MappingItem, ExtensionValue } from './index';
 
 let instance: AppConfigManager | null = null;
 
@@ -37,26 +37,60 @@ function findInModules(startDir: string): string | null {
   return null;
 }
 
+/**
+ * 扩展标签映射
+ */
+export interface ExtensionMapping {
+  id: string;           // 标签唯一ID
+  name: string;          // 标签展示名称
+  description?: string; // 标签描述
+  items: MappingItem[];  // 映射项数组
+}
+
+/**
+ * 简化的扩展标签（用于传给 AI，只包含 values 不含 condition）
+ */
+export interface ExtensionSimplified {
+  id: string;
+  name: string;
+  description?: string;
+  values: string[];
+}
+
 export class AppConfigManager {
   private appConfig: Record<string, any> | null = null;
   private lsmConfig: LSMConfig | null = null;
+  private extensions: Map<string, ExtensionMapping> = new Map();
+  private extensionsLoaded = false;
+  private extensionsSimplified: ExtensionSimplified[] | null = null;
 
   private constructor(
     public readonly appConfigPath: string,
     public readonly lsmConfigPath: string
-  ) {}
+  ) {
+    this.load();
+  }
 
-  static getInstance(appConfigPath: string, lsmConfigPath: string): AppConfigManager {
-    if (instance) return instance;
-    
+  /**
+   * 创建新实例（会自动查找配置文件）
+   */
+  static new(lsmConfigPath: string): AppConfigManager {
     const configDir = path.dirname(lsmConfigPath);
-    // 查找优先级：命令行传入 > config目录 > node_modules
-    let foundLsmPath = appConfigPath !== lsmConfigPath ? appConfigPath : null;
-    if (!foundLsmPath) foundLsmPath = findConfig(configDir, ['lsm.yaml', 'lsm.yml']);
+    // 查找优先级：config目录 > node_modules
+    let foundLsmPath = findConfig(configDir, ['lsm.yaml', 'lsm.yml']);
     if (!foundLsmPath) foundLsmPath = findInModules(configDir);
     
-    instance = new AppConfigManager(foundLsmPath || appConfigPath, lsmConfigPath);
-    instance.load();
+    instance = new AppConfigManager(foundLsmPath || lsmConfigPath, lsmConfigPath);
+    return instance;
+  }
+
+  /**
+   * 获取已有实例
+   */
+  static get(): AppConfigManager {
+    if (!instance) {
+      throw new Error('AppConfigManager 未初始化，请先调用 new()');
+    }
     return instance;
   }
 
@@ -66,6 +100,46 @@ export class AppConfigManager {
       this.appConfig = yaml.parse(content);
     }
     this.lsmConfig = parseConfig(this.lsmConfigPath);
+  }
+
+  /**
+   * 加载扩展标签配置
+   */
+  private loadExtensions(): void {
+    if (this.extensionsLoaded) return;
+
+    const extDir = path.join(path.dirname(this.lsmConfigPath), 'extensions');
+    
+    if (!fs.existsSync(extDir)) {
+      this.extensionsLoaded = true;
+      return;
+    }
+
+    const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+    
+    for (const file of files) {
+      const filePath = path.join(extDir, file);
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const parsed = yaml.parse(content);
+        if (parsed && parsed.id) {
+          const ext: ExtensionMapping = {
+            id: parsed.id,
+            name: parsed.name || parsed.id,
+            description: parsed.description,
+            items: (parsed.items || []).map((item: any) => ({
+              condition: item.condition,
+              value: item.value
+            }))
+          };
+          this.extensions.set(ext.id, ext);
+        }
+      } catch (err) {
+        console.error(`[AppConfigManager] Failed to load extension ${file}:`, err);
+      }
+    }
+
+    this.extensionsLoaded = true;
   }
 
   getDatabasePath(): string {
@@ -119,5 +193,112 @@ export class AppConfigManager {
       throw new Error('LSM 配置未初始化');
     }
     return this.lsmConfig;
+  }
+
+  /**
+   * 获取配置目录
+   */
+  getConfigDir(): string {
+    return path.dirname(this.lsmConfigPath);
+  }
+
+  /**
+   * 获取扩展标签的原始 YAML 内容
+   */
+  getExtensionsRawContent(): string {
+    const extDir = path.join(path.dirname(this.lsmConfigPath), 'extensions');
+    if (!fs.existsSync(extDir)) return '';
+
+    const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+    const contents: string[] = [];
+
+    for (const file of files) {
+      const filePath = path.join(extDir, file);
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        contents.push(`### ${file}\n\`\`\`yaml\n${content}\n\`\`\``);
+      } catch (err) {
+        console.error(`[AppConfigManager] Failed to read ${file}:`, err);
+      }
+    }
+
+    return contents.join('\n\n');
+  }
+
+  /**
+   * 获取所有扩展标签
+   */
+  getExtensions(): ExtensionMapping[] {
+    if (!this.extensionsLoaded) this.loadExtensions();
+    return Array.from(this.extensions.values());
+  }
+
+  /**
+   * 根据 ID 获取扩展标签
+   */
+  getExtensionById(id: string): ExtensionMapping | undefined {
+    if (!this.extensionsLoaded) this.loadExtensions();
+    return this.extensions.get(id);
+  }
+
+  /**
+   * 根据关键词搜索扩展标签
+   */
+  searchExtensions(keywords: string): ExtensionMapping[] {
+    if (!this.extensionsLoaded) this.loadExtensions();
+    
+    if (!keywords) {
+      return this.getExtensions();
+    }
+
+    const lower = keywords.toLowerCase();
+    return this.getExtensions().filter(ext => {
+      const matchName = ext.name.toLowerCase().includes(lower);
+      const matchDesc = ext.description?.toLowerCase().includes(lower);
+      const matchId = ext.id.toLowerCase().includes(lower);
+      const matchItems = ext.items.some(item => 
+        item.value?.toLowerCase().includes(lower)
+      );
+      return matchName || matchDesc || matchId || matchItems;
+    });
+  }
+
+  /**
+   * 获取简化的扩展标签（只包含 id, name, description, values，不含 condition）
+   * 用于传给 AI，仅提取一次并缓存
+   */
+  getExtensionsSimplified(): ExtensionSimplified[] {
+    if (this.extensionsSimplified) {
+      return this.extensionsSimplified;
+    }
+
+    if (!this.extensionsLoaded) this.loadExtensions();
+
+    this.extensionsSimplified = Array.from(this.extensions.values()).map(ext => ({
+      id: ext.id,
+      name: ext.name,
+      description: ext.description,
+      values: ext.items.map(item => item.value).filter((v): v is string => !!v)
+    }));
+
+    return this.extensionsSimplified;
+  }
+
+  /**
+   * 获取简化的扩展标签文本格式
+   * 用于直接传给 AI
+   */
+  getExtensionsSimplifiedText(): string {
+    const simplified = this.getExtensionsSimplified();
+    
+    return simplified.map(ext => {
+      const lines = [
+        `id: ${ext.id}`,
+        `name: ${ext.name}`,
+        ext.description ? `description: ${ext.description}` : '',
+        `values: [${ext.values.join(', ')}]`
+      ].filter(Boolean);
+      return lines.join('\n');
+    }).join('\n\n');
   }
 }

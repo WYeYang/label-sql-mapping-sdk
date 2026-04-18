@@ -37,6 +37,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LSMSDK = void 0;
 const dotenv = __importStar(require("dotenv"));
 const db_1 = require("./db");
+const query_executor_1 = require("./db/query-executor");
 const nlp_query_1 = require("./ai/nlp-query");
 const llm_manager_1 = require("./ai/llm-manager");
 const openai_llm_1 = require("./ai/openai-llm");
@@ -44,17 +45,19 @@ const app_config_1 = require("./config/app-config");
 const sql_helper_1 = require("./db/sql-helper");
 dotenv.config();
 class LSMSDK {
-    constructor(appConfigPath, lsmConfigPath, llm) {
+    constructor(lsmConfigPath, llm) {
         this.inited = false;
-        const appConfigManager = app_config_1.AppConfigManager.getInstance(appConfigPath, lsmConfigPath);
-        this.lsmConfig = appConfigManager.getLSMConfig();
-        this.database = db_1.DatabaseFactory.create(appConfigManager, this.lsmConfig);
+        const appConfigManager = app_config_1.AppConfigManager.new(lsmConfigPath);
+        const lsmConfig = appConfigManager.getLSMConfig();
+        this.database = db_1.DatabaseFactory.create(appConfigManager, lsmConfig);
         this.llmManager = new llm_manager_1.LLMManager(llm ?? new openai_llm_1.OpenAILLM(appConfigManager.getLLMConfig()));
-        this.nlpQuery = new nlp_query_1.NLPQuery(this.llmManager, this.lsmConfig);
-        this.sqlHelper = sql_helper_1.SqlHelper.create(this.lsmConfig);
+        this.nlpQuery = new nlp_query_1.NLPQuery(this.llmManager, lsmConfig);
+        const sqlHelper = sql_helper_1.SqlHelper.create(lsmConfig);
+        sqlHelper.setExtensions(appConfigManager.getExtensions());
+        this.queryExecutor = new query_executor_1.QueryExecutor(this.database, sqlHelper, appConfigManager.getExtensions());
     }
-    static async fromAppConfig(appConfigPath, lsmConfigPath, llm) {
-        const sdk = new LSMSDK(appConfigPath, lsmConfigPath, llm);
+    static async fromAppConfig(lsmConfigPath, llm) {
+        const sdk = new LSMSDK(lsmConfigPath, llm);
         await sdk.database.init();
         sdk.inited = true;
         return sdk;
@@ -80,22 +83,10 @@ class LSMSDK {
         if (!fullSqlStr.trim()) {
             throw new Error('SQL不能为空');
         }
-        const whereAndAfter = (0, sql_helper_1.extractWhereAndAfter)(fullSqlStr);
-        const offset = (page - 1) * pageSize;
-        // 计数
-        const countSql = this.sqlHelper.buildCountSql(whereAndAfter);
-        const countResult = this.database.query(countSql);
-        const total = countResult.rows[0]?.total || 0;
-        // label查询
-        const labelSql = this.sqlHelper.buildLabelSql(whereAndAfter, (0, sql_helper_1.hasLimit)(fullSqlStr), pageSize, offset);
-        const queryResult = this.database.query(labelSql);
+        const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize);
         return {
+            ...execResult,
             sql: fullSqlStr,
-            data: queryResult.rows,
-            total,
-            page,
-            pageSize,
-            totalPages: Math.ceil(total / pageSize),
             explanation
         };
     }

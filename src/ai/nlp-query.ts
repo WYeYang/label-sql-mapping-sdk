@@ -1,6 +1,6 @@
 // 自然语言查询工具
 
-import { LLMManager } from './llm-manager';
+import { LLMManager, ParseResult } from './llm-manager';
 import { LSMConfig } from '../config';
 
 /**
@@ -15,7 +15,7 @@ export class NLPQuery {
     this.config = config;
   }
 
-  async execute(query: string) {
+  async execute(query: string): Promise<ParseResult> {
     const schema = this.config.rawContent ?? '';
     return this.llmManager.parseQuery(query, schema);
   }

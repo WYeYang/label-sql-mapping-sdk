@@ -39,6 +39,7 @@ export interface MappingItem {
 export interface LabelMapping {
     id: string;
     name: string;
+    description?: string;
     condition?: string;
     value?: string;
     items?: MappingItem[];
@@ -53,5 +54,12 @@ export interface LSMConfig {
     database: DatabaseConfig;
     mappings: LabelMapping[];
     rawContent?: string;
+}
+/**
+ * 扩展标签值
+ */
+export interface ExtensionValue {
+    name: string;
+    values: string[];
 }
 //# sourceMappingURL=types.d.ts.map

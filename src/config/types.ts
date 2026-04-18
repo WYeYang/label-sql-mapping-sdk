@@ -34,7 +34,7 @@ export interface DatabaseConfig {
  */
 export interface MappingItem {
   condition?: string;  // 匹配条件
-  value: string;       // 字段引用或展示值
+  value: string;       // 展示值（也是 AI 识别的值）
 }
 
 /**
@@ -46,6 +46,7 @@ export interface MappingItem {
 export interface LabelMapping {
   id: string;          // 标签唯一ID
   name: string;        // 标签类型名称
+  description?: string; // 标签描述（用于 AI 理解字段用途）
   condition?: string;  // 前置条件（可选）
   value?: string;      // 单一值（单值模式）或默认值（items 模式匹配不到时）
   items?: MappingItem[]; // 映射项数组（多条件模式）
@@ -61,4 +62,12 @@ export interface LSMConfig {
   database: DatabaseConfig;    // 数据库配置
   mappings: LabelMapping[];    // 标签映射集合
   rawContent?: string;         // 原始配置文件内容
+}
+
+/**
+ * 扩展标签值
+ */
+export interface ExtensionValue {
+  name: string;     // 标签名
+  values: string[]; // 值列表
 }

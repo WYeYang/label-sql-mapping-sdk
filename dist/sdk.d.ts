@@ -1,22 +1,14 @@
 import { LLM } from './ai/types';
-export interface QueryResult {
-    sql: string;
-    data: any[];
-    total: number;
-    page: number;
-    pageSize: number;
-    totalPages: number;
-    explanation?: string;
-}
+import { QueryResult } from './db/types';
+export { QueryResult } from './db/types';
 export declare class LSMSDK {
-    private readonly lsmConfig;
     private readonly database;
     private readonly llmManager;
     private readonly nlpQuery;
-    private readonly sqlHelper;
+    private readonly queryExecutor;
     private inited;
     private constructor();
-    static fromAppConfig(appConfigPath: string, lsmConfigPath: string, llm?: LLM): Promise<LSMSDK>;
+    static fromAppConfig(lsmConfigPath: string, llm?: LLM): Promise<LSMSDK>;
     /**
      * 自然语言查询
      */

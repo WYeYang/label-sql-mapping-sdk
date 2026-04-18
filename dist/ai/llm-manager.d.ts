@@ -3,6 +3,13 @@ export interface FilterResult {
     sql: string;
     explanation: string;
 }
+export interface ParseResult extends FilterResult {
+    extensions?: ExtensionInfo[];
+}
+export interface ExtensionInfo {
+    id: string;
+    values: string[];
+}
 /**
  * LLM Manager
  */
@@ -13,13 +20,6 @@ export declare class LLMManager {
      * 解析自然语言查询意图
      * 返回完整SQL语句
      */
-    parseQuery(naturalLanguageQuery: string, schema: string): Promise<FilterResult>;
-    /**
-     * 兼容旧方法
-     */
-    generateSQL(naturalLanguageQuery: string, schema: string): Promise<{
-        sql: string;
-        explanation: string;
-    }>;
+    parseQuery(naturalLanguageQuery: string, schema: string): Promise<ParseResult>;
 }
 //# sourceMappingURL=llm-manager.d.ts.map

@@ -2,49 +2,44 @@
 
 import * as dotenv from 'dotenv';
 import { Database, DatabaseFactory } from './db';
+import { QueryExecutor } from './db/query-executor';
 import { NLPQuery } from './ai/nlp-query';
 import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
 import { LLM } from './ai/types';
 import { AppConfigManager } from './config/app-config';
-import { SqlHelper, extractWhereAndAfter, hasLimit } from './db/sql-helper';
+import { SqlHelper } from './db/sql-helper';
+import { QueryResult } from './db/types';
 
 dotenv.config();
 
-export interface QueryResult {
-  sql: string;
-  data: any[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-  explanation?: string;
-}
+export { QueryResult } from './db/types';
 
 export class LSMSDK {
-  private readonly lsmConfig;
   private readonly database;
-  private readonly llmManager;
-  private readonly nlpQuery;
-  private readonly sqlHelper: SqlHelper;
+  private readonly llmManager: LLMManager;
+  private readonly nlpQuery: NLPQuery;
+  private readonly queryExecutor: QueryExecutor;
   private inited = false;
 
   private constructor(
-    appConfigPath: string,
     lsmConfigPath: string,
     llm?: LLM
   ) {
-    const appConfigManager = AppConfigManager.getInstance(appConfigPath, lsmConfigPath);
+    const appConfigManager = AppConfigManager.new(lsmConfigPath);
+    const lsmConfig = appConfigManager.getLSMConfig();
 
-    this.lsmConfig = appConfigManager.getLSMConfig();
-    this.database = DatabaseFactory.create(appConfigManager, this.lsmConfig);
+    this.database = DatabaseFactory.create(appConfigManager, lsmConfig);
     this.llmManager = new LLMManager(llm ?? new OpenAILLM(appConfigManager.getLLMConfig()));
-    this.nlpQuery = new NLPQuery(this.llmManager, this.lsmConfig);
-    this.sqlHelper = SqlHelper.create(this.lsmConfig);
+    this.nlpQuery = new NLPQuery(this.llmManager, lsmConfig);
+    
+    const sqlHelper = SqlHelper.create(lsmConfig);
+    sqlHelper.setExtensions(appConfigManager.getExtensions());
+    this.queryExecutor = new QueryExecutor(this.database, sqlHelper, appConfigManager.getExtensions());
   }
 
-  static async fromAppConfig(appConfigPath: string, lsmConfigPath: string, llm?: LLM): Promise<LSMSDK> {
-    const sdk = new LSMSDK(appConfigPath, lsmConfigPath, llm);
+  static async fromAppConfig(lsmConfigPath: string, llm?: LLM): Promise<LSMSDK> {
+    const sdk = new LSMSDK(lsmConfigPath, llm);
     await sdk.database.init();
     sdk.inited = true;
     return sdk;
@@ -78,30 +73,11 @@ export class LSMSDK {
       throw new Error('SQL不能为空');
     }
 
-    const whereAndAfter = extractWhereAndAfter(fullSqlStr);
-    const offset = (page - 1) * pageSize;
-
-    // 计数
-    const countSql = this.sqlHelper.buildCountSql(whereAndAfter);
-    const countResult = this.database.query(countSql);
-    const total = countResult.rows[0]?.total || 0;
-
-    // label查询
-    const labelSql = this.sqlHelper.buildLabelSql(
-      whereAndAfter,
-      hasLimit(fullSqlStr),
-      pageSize,
-      offset
-    );
-    const queryResult = this.database.query(labelSql);
-
+    const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize);
+    
     return {
+      ...execResult,
       sql: fullSqlStr,
-      data: queryResult.rows,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize),
       explanation
     };
   }

@@ -1,5 +1,5 @@
 "use strict";
-// AI模块导出
+// AI 模块
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -18,5 +18,4 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./types"), exports);
 __exportStar(require("./llm-manager"), exports);
 __exportStar(require("./openai-llm"), exports);
-__exportStar(require("./nlp-query"), exports);
 //# sourceMappingURL=index.js.map

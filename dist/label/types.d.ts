@@ -1,33 +1,18 @@
+import { MappingItem } from '../config/types';
 /**
- * 标签数据
+ * 扩展标签映射
  */
-export interface LabelData {
+export interface ExtensionMapping {
     id: string;
     name: string;
-    items: LabelItem[];
+    description?: string;
+    items: MappingItem[];
 }
 /**
- * 标签项
+ * 工具调用结果
  */
-export interface LabelItem {
-    condition?: string;
-    value: string;
-}
-/**
- * 标签查询选项
- */
-export interface LabelQueryOptions {
-    filter?: string;
-    sortBy?: 'id' | 'name';
-    sortDirection?: 'ASC' | 'DESC';
-}
-/**
- * 主标签查询结果
- */
-export interface MainLabelResult {
-    labelId: string;
-    labelName: string;
-    itemValue: string;
-    condition?: string;
+export interface ToolCallResult {
+    labels: ExtensionMapping[];
+    sql?: string;
 }
 //# sourceMappingURL=types.d.ts.map

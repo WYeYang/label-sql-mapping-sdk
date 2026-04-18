@@ -2,7 +2,7 @@
 
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
-import { Database as IDatabase, DBConfig, QueryResult } from './types';
+import { Database as IDatabase, DBConfig, DBQueryResult } from './types';
 import { DatabaseType as DBKind } from '../config';
 
 export class SQLiteDatabase implements IDatabase {
@@ -22,7 +22,7 @@ export class SQLiteDatabase implements IDatabase {
     this.db = new Database(this.path, { readonly: true });
   }
 
-  query(sql: string): QueryResult {
+  query(sql: string): DBQueryResult {
     if (!this.db) {
       throw new Error('Database not initialized. Call init() first.');
     }
