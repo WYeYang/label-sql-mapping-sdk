@@ -17,6 +17,19 @@ function findConfig(dir: string, names: string[]): string | null {
   return null;
 }
 
+/** 从目录链查找 lsm 配置文件 */
+function findLsmConfig(startDir: string): string | null {
+  let dir = startDir;
+  while (dir !== path.dirname(dir)) {
+    const lsmPath = path.join(dir, 'lsm.yaml');
+    if (fs.existsSync(lsmPath)) return lsmPath;
+    const lsmYmlPath = path.join(dir, 'lsm.yml');
+    if (fs.existsSync(lsmYmlPath)) return lsmYmlPath;
+    dir = path.dirname(dir);
+  }
+  return null;
+}
+
 /** 从 node_modules 查找 lsm 配置文件 */
 function findInModules(startDir: string): string | null {
   let dir = startDir;
@@ -63,14 +76,24 @@ export class AppConfigManager {
 
   /**
    * 创建新实例（会自动查找配置文件）
+   * @param lsmConfigPath 主配置文件路径（如 main.yaml）
    */
   static new(lsmConfigPath: string): AppConfigManager {
     const configDir = path.dirname(lsmConfigPath);
-    // 查找优先级：config目录 > node_modules
-    let foundLsmPath = findConfig(configDir, ['lsm.yaml', 'lsm.yml']);
-    if (!foundLsmPath) foundLsmPath = findInModules(configDir);
     
-    instance = new AppConfigManager(foundLsmPath || lsmConfigPath, lsmConfigPath);
+    // 查找 llm 配置文件（lsm.yaml）：
+    // 1. 先在目录链上查找
+    // 2. 再从 node_modules 查找
+    let appConfigPath = findLsmConfig(configDir);
+    if (!appConfigPath) appConfigPath = findInModules(configDir);
+    
+    // 如果没找到 lsm.yaml，使用主配置文件作为 appConfig
+    if (!appConfigPath) {
+      appConfigPath = lsmConfigPath;
+    }
+    
+    // lsmConfigPath 保持传入的路径（main.yaml）
+    instance = new AppConfigManager(appConfigPath, lsmConfigPath);
     return instance;
   }
 
