@@ -46,11 +46,12 @@ export class LSMSDK {
 
   /**
    * 从配置文件创建 SDK 实例
-   * @param configPath 主配置文件路径（如 main.yaml）或 lsm-* 包名（如 'lsm-ygopro-database'）
-   * @param lsmPath llm 配置文件路径（如 lsm.yaml），不传则自动查找
+   * @param configPath main.yaml: lsm-* 包名或文件路径（不传则自动查找）
+   * @param lsmPath lsm.yaml: 可选，文件路径（不传则自动向上查找）
    */
-  static async fromAppConfig(configPath: string, lsmPath?: string): Promise<LSMSDK> {
-    const sdk = new LSMSDK(configPath, lsmPath);
+  static async fromAppConfig(configPath?: string, lsmPath?: string): Promise<LSMSDK> {
+    // 默认使用 'lsm' 表示自动查找任意 lsm-* 包
+    const sdk = new LSMSDK(configPath || 'lsm', lsmPath);
     await sdk.database.init();
     sdk.inited = true;
     return sdk;
