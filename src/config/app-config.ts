@@ -143,6 +143,9 @@ export class AppConfigManager {
       const content = fs.readFileSync(this.labelsPath, 'utf8');
       const parsed = yaml.parse(content);
       this.labelsConfig = processConfigDefaults(parsed);
+      if (this.labelsConfig) {
+        this.labelsConfig.rawContent = content;
+      }
     }
   }
 

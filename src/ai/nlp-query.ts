@@ -19,6 +19,8 @@ export class NLPQuery {
 
   async execute(query: string): Promise<ParseResult> {
     const schema = this.config.rawContent ?? '';
-    return this.llmManager.parseQuery(query, schema);
+    const result = await this.llmManager.parseQuery(query, schema);
+    console.log('[NLPQuery] Generated SQL:', result.sql);
+    return result;
   }
 }
