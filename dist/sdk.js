@@ -39,6 +39,7 @@ const dotenv = __importStar(require("dotenv"));
 const db_1 = require("./db");
 const query_executor_1 = require("./db/query-executor");
 const nlp_query_1 = require("./ai/nlp-query");
+const extension_merger_1 = require("./ai/extension-merger");
 const llm_manager_1 = require("./ai/llm-manager");
 const openai_llm_1 = require("./ai/openai-llm");
 const app_config_1 = require("./config/app-config");
@@ -49,12 +50,14 @@ class LSMSDK {
         this.inited = false;
         const appConfigManager = app_config_1.AppConfigManager.new(lsmConfigPath);
         const lsmConfig = appConfigManager.getLSMConfig();
+        const extensions = appConfigManager.getExtensions();
         this.database = db_1.DatabaseFactory.create(appConfigManager, lsmConfig);
         this.llmManager = new llm_manager_1.LLMManager(llm ?? new openai_llm_1.OpenAILLM(appConfigManager.getLLMConfig()));
         this.nlpQuery = new nlp_query_1.NLPQuery(this.llmManager, lsmConfig);
         const sqlHelper = sql_helper_1.SqlHelper.create(lsmConfig);
-        sqlHelper.setExtensions(appConfigManager.getExtensions());
-        this.queryExecutor = new query_executor_1.QueryExecutor(this.database, sqlHelper, appConfigManager.getExtensions());
+        sqlHelper.setExtensions(extensions);
+        this.queryExecutor = new query_executor_1.QueryExecutor(this.database, sqlHelper, extensions);
+        this.extMerger = new extension_merger_1.ExtensionMerger(extensions);
     }
     static async fromAppConfig(lsmConfigPath, llm) {
         const sdk = new LSMSDK(lsmConfigPath, llm);
@@ -64,15 +67,24 @@ class LSMSDK {
     }
     /**
      * 自然语言查询
+     * @param options.query 自然语言查询
+     * @param options.sql 原始SQL（与query二选一）
+     * @param options.page 页码，默认1
+     * @param options.pageSize 每页数量，默认20
+     * @param options.mode 查询模式：list(列表) 或 detail(详情)
+     * @param options.extensions 扩展标签值列表（会根据配置找到对应ID后合并）
      */
     async query(options) {
-        const { query, sql, page = 1, pageSize = 20 } = options;
+        const { query, sql, page = 1, pageSize = 20, mode = 'list' } = options;
         let explanation;
         let fullSqlStr = sql ?? '';
+        // 构建 extensions：外部传入的值 + AI 返回的 extensions
+        let aiExtensions = this.extMerger.buildFromValues(options.extensions ?? []);
         if (query) {
             const result = await this.nlpQuery.execute(query);
             explanation = result.explanation;
             fullSqlStr = result.sql;
+            aiExtensions = this.extMerger.merge(aiExtensions, result.extensions ?? []);
         }
         else if (sql) {
             fullSqlStr = sql;
@@ -83,7 +95,7 @@ class LSMSDK {
         if (!fullSqlStr.trim()) {
             throw new Error('SQL不能为空');
         }
-        const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize);
+        const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize, mode, aiExtensions);
         return {
             ...execResult,
             sql: fullSqlStr,

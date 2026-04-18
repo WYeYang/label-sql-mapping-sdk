@@ -3,6 +3,8 @@
 import { LLMManager, ParseResult } from './llm-manager';
 import { LSMConfig } from '../config';
 
+export { ParseResult };
+
 /**
  * 自然语言查询工具
  */

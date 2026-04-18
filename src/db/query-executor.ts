@@ -3,12 +3,26 @@
 import { Database, DBQueryResult } from '../db';
 import { SqlHelper, extractWhereAndAfter, hasLimit } from './sql-helper';
 import type { ExtensionMapping } from '../config';
+import type { ExtensionValue } from './types';
 import { QueryResult } from './types';
+
+/**
+ * 查询模式
+ */
+export type QueryMode = 'list' | 'detail';
+
+/**
+ * AI 返回的扩展标签信息
+ */
+export interface AIExtensions {
+  id: string;       // 扩展标签ID
+  values: string[]; // 匹配的值列表
+}
 
 /**
  * 查询执行器返回结果
  */
-type QueryExecResult = Pick<QueryResult, 'data' | 'total' | 'page' | 'pageSize' | 'totalPages'>;
+type QueryExecResult = Pick<QueryResult, 'data' | 'total' | 'page' | 'pageSize' | 'totalPages' | 'extensions'>;
 
 /**
  * 查询执行器
@@ -24,7 +38,7 @@ export class QueryExecutor {
   /**
    * 执行查询
    */
-  execute(fullSqlStr: string, page: number, pageSize: number): QueryExecResult {
+  execute(fullSqlStr: string, page: number, pageSize: number, mode: QueryMode = 'list', aiExtensions?: AIExtensions[]): QueryExecResult {
     const whereAndAfter = extractWhereAndAfter(fullSqlStr);
 
     // 第一次 SQL：count
@@ -32,12 +46,33 @@ export class QueryExecutor {
     const countResult: DBQueryResult = this.database.query(countSql);
     const total = countResult.rows[0]?.total || 0;
 
-    // 根据 total 决定扩展标签范围
-    let extMappings: ExtensionMapping[];
-    if (total === 1) {
+    let extMappings: ExtensionMapping[] = [];
+    let extensionsResult: Record<string, ExtensionValue> | undefined;
+
+    if (mode === 'detail') {
+      // 详情模式：查询全部扩展标签，嵌入每条数据
       extMappings = this.extensions;
     } else {
-      extMappings = [];
+      // 列表模式：根据 AI 返回的扩展标签构建独立字段
+      if (aiExtensions?.length) {
+        // 根据 AI 返回的 extensions 获取对应的配置
+        const extValues: Record<string, Set<string>> = {};
+        for (const ext of aiExtensions) {
+          extValues[ext.id] = new Set(ext.values);
+        }
+
+        // 收集扩展标签值
+        extensionsResult = {};
+        for (const ext of this.extensions) {
+          const values = extValues[ext.id];
+          if (values?.size) {
+            extensionsResult[ext.name] = {
+              name: ext.name,
+              values: Array.from(values)
+            };
+          }
+        }
+      }
     }
 
     // 构建 SQL
@@ -59,7 +94,8 @@ export class QueryExecutor {
       total, 
       page, 
       pageSize, 
-      totalPages: Math.ceil(total / pageSize)
+      totalPages: Math.ceil(total / pageSize),
+      extensions: Object.keys(extensionsResult || {}).length ? extensionsResult : undefined
     };
   }
 }

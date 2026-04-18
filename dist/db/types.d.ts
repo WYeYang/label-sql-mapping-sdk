@@ -13,6 +13,13 @@ export interface DBQueryResult {
     rows: any[];
 }
 /**
+ * 扩展标签值
+ */
+export interface ExtensionValue {
+    name: string;
+    values: string[];
+}
+/**
  * SDK 统一查询结果
  */
 export interface QueryResult {
@@ -23,6 +30,8 @@ export interface QueryResult {
     pageSize: number;
     totalPages: number;
     explanation?: string;
+    /** 扩展标签（列表模式下独立返回） */
+    extensions?: Record<string, ExtensionValue>;
 }
 /**
  * 数据库操作接口
