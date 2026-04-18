@@ -3,7 +3,7 @@
 import * as dotenv from 'dotenv';
 import { Database, DatabaseFactory } from './db';
 import { QueryExecutor, QueryMode } from './db/query-executor';
-import { NLPQuery, ParseResult } from './ai/nlp-query';
+import { NLPQuery } from './ai/nlp-query';
 import { ExtensionMerger } from './ai/extension-merger';
 import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
@@ -16,6 +16,19 @@ dotenv.config();
 
 export { QueryResult } from './db/types';
 export { QueryMode } from './db/query-executor';
+export { LLM } from './ai/types';
+
+/**
+ * SDK 配置选项
+ */
+export interface LSMSDKOptions {
+  /** main.yaml 路径、lsm-* 包名，或不传（自动查找） */
+  configPath?: string;
+  /** lsm.yaml 路径，可选（不传则自动向上查找） */
+  lsmPath?: string;
+  /** 自定义 LLM，可选（不传则从 lsm.yaml 读取） */
+  llm?: LLM;
+}
 
 export class LSMSDK {
   private readonly database;
@@ -23,38 +36,30 @@ export class LSMSDK {
   private readonly nlpQuery: NLPQuery;
   private readonly queryExecutor: QueryExecutor;
   private readonly extMerger: ExtensionMerger;
-  private inited = false;
 
-  private constructor(
-    configPath: string,
-    lsmPath?: string
-  ) {
-    const appConfigManager = AppConfigManager.new(configPath, lsmPath);
+  constructor(options?: LSMSDKOptions) {
+    const appConfigManager = AppConfigManager.new(options?.configPath, options?.lsmPath);
     const lsmConfig = appConfigManager.getLSMConfig();
     const extensions = appConfigManager.getExtensions();
-    const llm = appConfigManager.getLLMConfig();
+    
+    let llm: LLM;
+    if (options?.llm) {
+      // 使用传入的 LLM
+      llm = options.llm;
+    } else {
+      // 从 lsm.yaml 读取 LLM 配置
+      const llmConfig = appConfigManager.getLLMConfig();
+      llm = new OpenAILLM(llmConfig);
+    }
     
     this.database = DatabaseFactory.create(appConfigManager, lsmConfig);
-    this.llmManager = new LLMManager(new OpenAILLM(llm));
+    this.llmManager = new LLMManager(llm);
     this.nlpQuery = new NLPQuery(this.llmManager, lsmConfig);
     
     const sqlHelper = SqlHelper.create(lsmConfig);
     sqlHelper.setExtensions(extensions);
     this.queryExecutor = new QueryExecutor(this.database, sqlHelper, extensions);
     this.extMerger = new ExtensionMerger(extensions);
-  }
-
-  /**
-   * 从配置文件创建 SDK 实例
-   * @param configPath main.yaml: lsm-* 包名或文件路径（不传则自动查找）
-   * @param lsmPath lsm.yaml: 可选，文件路径（不传则自动向上查找）
-   */
-  static async fromAppConfig(configPath?: string, lsmPath?: string): Promise<LSMSDK> {
-    // 默认使用 'lsm' 表示自动查找任意 lsm-* 包
-    const sdk = new LSMSDK(configPath || 'lsm', lsmPath);
-    await sdk.database.init();
-    sdk.inited = true;
-    return sdk;
   }
 
   /**

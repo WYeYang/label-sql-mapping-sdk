@@ -83,19 +83,27 @@ export class AppConfigManager {
 
   /**
    * 创建新实例
-   * @param configPath main.yaml: 'lsm'（自动查找）或 lsm-* 包名
-   * @param lsmPath lsm.yaml: 可选，文件路径，不传则自动向上查找
+   * @param configPath main.yaml: 文件路径、'lsm'（自动查找）或 lsm-* 包名
+   * @param lsmPath lsm.yaml: 文件路径，可选（不传则从 main.yaml 目录向上查找）
    */
-  static new(configPath: string, lsmPath?: string): AppConfigManager {
-    let packagePath: string;
+  static new(configPath?: string, lsmPath?: string): AppConfigManager {
+    let mainYamlPath: string;
+    let packagePath: string | null = null;
     
-    // 'lsm' 表示自动查找任意 lsm-* 包
-    if (configPath === 'lsm') {
+    if (!configPath) {
+      // 空值，自动查找任意 lsm-* 包
       const found = findLsmPackage(process.cwd());
       if (!found) {
         throw new Error('找不到 lsm-* 包，请先安装，如: npm install lsm-xxx');
       }
       packagePath = found;
+      mainYamlPath = path.join(packagePath, 'main.yaml');
+    } else if (/[\/\\]|\.ya?ml$/.test(configPath)) {
+      // 文件路径
+      mainYamlPath = path.resolve(configPath);
+      if (!fs.existsSync(mainYamlPath)) {
+        throw new Error(`找不到 main.yaml: ${mainYamlPath}`);
+      }
     } else {
       // 当作包名查找
       const found = findLsmPackage(process.cwd(), configPath);
@@ -103,41 +111,34 @@ export class AppConfigManager {
         throw new Error(`找不到 lsm-* 包: ${configPath}`);
       }
       packagePath = found;
+      mainYamlPath = path.join(packagePath, 'main.yaml');
     }
     
-    const mainYamlPath = path.join(packagePath, 'main.yaml');
-    
-    // 查找 lsm.yaml（只支持路径）
-    let appConfigPath: string | null = null;
+    // 查找 lsm.yaml
+    let lsmYamlPath: string | null = null;
     
     if (lsmPath) {
       // 参数指定路径
-      appConfigPath = fs.existsSync(lsmPath) ? lsmPath : null;
-    }
-    
-    if (!appConfigPath) {
-      // 自动向上查找
-      const searchDir = path.dirname(path.dirname(packagePath)); // node_modules 的父目录
-      appConfigPath = findLsmConfig(searchDir);
-    }
-    
-    if (!appConfigPath) {
-      // 在当前包的目录查找
-      const pkgLsmPath = path.join(packagePath, 'lsm.yaml');
-      if (fs.existsSync(pkgLsmPath)) {
-        appConfigPath = pkgLsmPath;
-      }
+      lsmYamlPath = fs.existsSync(lsmPath) ? path.resolve(lsmPath) : null;
+    } else if (packagePath) {
+      // 从 node_modules 上级向上查找
+      const searchDir = path.dirname(path.dirname(packagePath));
+      lsmYamlPath = findLsmConfig(searchDir);
+    } else {
+      // 从 main.yaml 所在目录向上查找
+      const searchDir = path.dirname(mainYamlPath);
+      lsmYamlPath = findLsmConfig(searchDir);
     }
     
     console.log(`[AppConfig] main.yaml: ${mainYamlPath}`);
-    console.log(`[AppConfig] lsm.yaml: ${appConfigPath}`);
+    console.log(`[AppConfig] lsm.yaml: ${lsmYamlPath}`);
     
     // 如果没找到 lsm.yaml，使用 main.yaml
-    if (!appConfigPath || !fs.existsSync(appConfigPath)) {
-      appConfigPath = mainYamlPath;
+    if (!lsmYamlPath || !fs.existsSync(lsmYamlPath)) {
+      lsmYamlPath = mainYamlPath;
     }
     
-    instance = new AppConfigManager(appConfigPath, mainYamlPath);
+    instance = new AppConfigManager(mainYamlPath, lsmYamlPath);
     return instance;
   }
 
@@ -161,14 +162,13 @@ export class AppConfigManager {
 
   /**
    * 加载扩展标签配置
-   * 支持两种格式：
-   * 1. 有 items 的格式：items: [{condition, value}]
-   * 2. 只有 values 的格式：values: ["value1", "value2"]
+   * 格式：items: [{condition, value}]
    */
   private loadExtensions(): void {
     if (this.extensionsLoaded) return;
 
-    const extDir = path.join(path.dirname(this.lsmConfigPath), 'extensions');
+    // 扩展配置从 main.yaml 同级目录加载
+    const extDir = path.join(path.dirname(this.appConfigPath), 'extensions');
     
     if (!fs.existsSync(extDir)) {
       this.extensionsLoaded = true;
@@ -182,28 +182,16 @@ export class AppConfigManager {
       try {
         const content = fs.readFileSync(filePath, 'utf-8');
         const parsed = yaml.parse(content);
-        if (parsed && parsed.id) {
+        if (parsed && parsed.id && parsed.items && Array.isArray(parsed.items)) {
           const ext: ExtensionMapping = {
             id: parsed.id,
             name: parsed.name || parsed.id,
             description: parsed.description,
-            items: []
-          };
-
-          // 兼容两种格式
-          if (parsed.items && Array.isArray(parsed.items)) {
-            // 格式1: items: [{condition, value}]
-            ext.items = parsed.items.map((item: any) => ({
+            items: parsed.items.map((item: any) => ({
               condition: item.condition,
               value: item.value
-            }));
-          } else if (parsed.values && Array.isArray(parsed.values)) {
-            // 格式2: values: ["value1", "value2"]
-            ext.items = parsed.values.map((v: string) => ({
-              value: v
-            }));
-          }
-
+            }))
+          };
           this.extensions.set(ext.id, ext);
         }
       } catch (err) {
@@ -232,9 +220,17 @@ export class AppConfigManager {
   }
 
   getLLMConfig(): LLMConfig {
-    const llmConfig = this.appConfig?.llm;
+    // 从 lsm.yaml 中查找 llm 配置
+    if (!fs.existsSync(this.lsmConfigPath)) {
+      throw new Error('错误: 找不到 lsm.yaml 配置文件');
+    }
+    
+    const lsmContent = fs.readFileSync(this.lsmConfigPath, 'utf8');
+    const lsmParsed = yaml.parse(lsmContent);
+    const llmConfig = lsmParsed?.llm;
+    
     if (!llmConfig) {
-      throw new Error('错误: 请在配置文件中配置 LLM');
+      throw new Error('错误: 请在 lsm.yaml 中配置 LLM');
     }
 
     const apiKey = process.env.OPENAI_API_KEY || llmConfig.apiKey;
