@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
 import { LLMConfig } from '../ai';
-import { LSMConfig, parseConfig, MappingItem } from './index';
+import { LSMConfig, parseConfig, processConfigDefaults, MappingItem } from './index';
 
 let instance: AppConfigManager | null = null;
 
@@ -43,10 +43,10 @@ function findLsmPackage(startDir: string, packageName?: string): string | null {
         const packagePath = path.join(nodeModules, packageName);
         if (fs.existsSync(packagePath)) return packagePath;
       } else {
-        // 不指定包名，返回第一个找到的包
+        // 不指定包名，返回第一个包含 main.yaml 的 lsm-* 包
         const entries = fs.readdirSync(nodeModules);
         for (const name of entries) {
-          if (name.startsWith('lsm-')) {
+          if (name.startsWith('lsm-') && fs.existsSync(path.join(nodeModules, name, 'main.yaml'))) {
             return path.join(nodeModules, name);
           }
         }
@@ -153,11 +153,12 @@ export class AppConfigManager {
   }
 
   private load(): void {
+    // 解析 main.yaml
     if (fs.existsSync(this.appConfigPath)) {
       const content = fs.readFileSync(this.appConfigPath, 'utf8');
       this.appConfig = yaml.parse(content);
+      this.lsmConfig = processConfigDefaults(this.appConfig);
     }
-    this.lsmConfig = parseConfig(this.lsmConfigPath);
   }
 
   /**

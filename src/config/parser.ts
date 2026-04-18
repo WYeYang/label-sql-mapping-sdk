@@ -101,7 +101,7 @@ function validateConfig(config: any): void {
  * @param config 配置对象
  * @returns 处理后的配置对象
  */
-function processConfigDefaults(config: any): any {
+export function processConfigDefaults(config: any): any {
   const processedConfig = { ...config };
   
   // 处理表配置默认值
