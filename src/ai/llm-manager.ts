@@ -47,6 +47,8 @@ ${extSimplifiedText}
 - mappings中的id和name不是数据库字段名，它们只是标签
 - SQL中必须使用d.xxx或t.xxx形式的真实数据库字段名
 - d表对应datas，t表对应texts
+- 不要在SQL中添加LIMIT，SDK会自动处理分页
+- 用户提到"前N条"、"只查N条"等明确数量时才添加LIMIT
 
 ## 任务
 根据用户输入，生成完整的SQL查询语句。
