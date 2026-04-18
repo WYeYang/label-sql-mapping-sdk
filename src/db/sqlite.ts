@@ -6,26 +6,19 @@ import { Database as IDatabase, DBConfig, DBQueryResult } from './types';
 import { DatabaseType as DBKind } from '../config';
 
 export class SQLiteDatabase implements IDatabase {
-  private db: DatabaseType | null = null;
+  private db: DatabaseType;
 
   constructor(config: DBConfig) {
     if (!config.path) {
       throw new Error('SQLite数据库路径不能为空');
     }
+    this.db = new Database(config.path, { readonly: true });
     this.path = config.path;
   }
 
   private path: string;
 
-  async init(): Promise<void> {
-    if (this.db) return;
-    this.db = new Database(this.path, { readonly: true });
-  }
-
   query(sql: string): DBQueryResult {
-    if (!this.db) {
-      throw new Error('Database not initialized. Call init() first.');
-    }
     const rows = this.db.prepare(sql).all();
     return { rows };
   }

@@ -47,5 +47,4 @@ export interface Database {
   query(sql: string): DBQueryResult;
   close(): void;
   getType(): DatabaseType;
-  init(): Promise<void>;
 }
