@@ -288,12 +288,11 @@ export class AppConfigManager {
     if (!item) return null;
 
     // 返回描述信息，让LLM根据描述自行理解并推导SQL
-    // 优先使用item.description，不存在时fallback到ext.description
     return JSON.stringify({
       extensionId: ext.id,
       extensionName: ext.name,
       value: item.value,
-      description: item.description || ext.description,
+      description: item.description || '无description',
     });
   }
 
