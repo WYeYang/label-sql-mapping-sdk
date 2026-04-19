@@ -275,6 +275,47 @@ export class AppConfigManager {
   }
 
   /**
+   * 获取扩展标签详情（用于工具调用）
+   */
+  getExtensionDetail(extensionId: string, value: string): string | null {
+    if (!this.extensionsLoaded) this.loadExtensions();
+    const ext = this.extensions.get(extensionId);
+    if (!ext) return null;
+
+    const item = ext.items.find(i => i.value === value);
+    if (!item) return null;
+
+    // 返回详细信息
+    return JSON.stringify({
+      extensionId: ext.id,
+      extensionName: ext.name,
+      value: item.value,
+      description: ext.description,
+      sqlCondition: item.condition
+    });
+  }
+
+  /**
+   * 获取扩展标签的工具定义
+   */
+  getExtensionTools(): { name: string; description: string; params: { name: string; description: string; type: 'string' | 'number' | 'boolean'; required: boolean }[] }[] {
+    if (!this.extensionsLoaded) this.loadExtensions();
+
+    return Array.from(this.extensions.values()).map(ext => ({
+      name: `get_${ext.id}_detail`,
+      description: `获取${ext.name}标签的详细信息和使用说明。当需要更详细地了解某个${ext.name}标签的含义和使用方式时调用此工具。`,
+      params: [
+        {
+          name: 'value',
+          description: `要查询的${ext.name}值，如：${ext.items.map(i => i.value).filter(Boolean).slice(0, 5).join('、')}等`,
+          type: 'string' as const,
+          required: true
+        }
+      ]
+    }));
+  }
+
+  /**
    * 获取简化的扩展标签文本格式
    * 用于直接传给 AI，缓存结果
    */
