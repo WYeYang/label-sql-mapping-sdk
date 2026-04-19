@@ -35,6 +35,7 @@ export interface DatabaseConfig {
 export interface MappingItem {
   condition?: string;  // 匹配条件
   value: string;       // 展示值（也是 AI 识别的值）
+  description?: string; // 描述（用于工具调用返回给LLM）
 }
 
 /**

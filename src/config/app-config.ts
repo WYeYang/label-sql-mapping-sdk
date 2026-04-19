@@ -178,7 +178,8 @@ export class AppConfigManager {
             description: parsed.description,
             items: parsed.items.map((item: any) => ({
               condition: item.condition,
-              value: item.value
+              value: item.value,
+              description: item.description
             }))
           };
           this.extensions.set(ext.id, ext);
@@ -276,6 +277,7 @@ export class AppConfigManager {
 
   /**
    * 获取扩展标签详情（用于工具调用）
+   * 返回description让LLM自行理解推导SQL
    */
   getExtensionDetail(extensionId: string, value: string): string | null {
     if (!this.extensionsLoaded) this.loadExtensions();
@@ -285,13 +287,12 @@ export class AppConfigManager {
     const item = ext.items.find(i => i.value === value);
     if (!item) return null;
 
-    // 返回详细信息
+    // 返回描述信息，让LLM根据描述自行理解并推导SQL
     return JSON.stringify({
       extensionId: ext.id,
       extensionName: ext.name,
       value: item.value,
-      description: ext.description,
-      sqlCondition: item.condition
+      description: item.description || ext.description,
     });
   }
 
