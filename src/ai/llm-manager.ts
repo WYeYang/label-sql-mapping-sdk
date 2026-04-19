@@ -58,7 +58,7 @@ ${extSimplifiedText}
 ## 重要：工具调用
 遇到extensions标签时，**必须**先调用对应工具获取详细信息，根据详细信息中的description理解标签含义，再生成SQL。
 工具调用示例：
-- 用户说"卡组检索白龙" → 先调用 get_effect_type_detail(value="卡组检索") 获取详细说明
+- 用户查询包含效果类型时 → 调用 get_effect_type_detail(value="效果类型名称") 获取详细说明
 
 ## 输出格式（JSON）
 {
