@@ -103,8 +103,12 @@ ${extSimplifiedText}
         }
       }
 
-      // 第二轮：根据工具返回结果生成SQL
-      const secondResponse = await this.llm.chat(messages);
+      // 第二轮：只传工具结果和简单指令，不传完整system prompt
+      const secondMessages = [
+        { role: 'system' as const, content: '根据工具返回的标签详情，生成对应的SQL。输出JSON格式：{"sql": "SQL语句", "explanation": "说明", "extensions": [{"id": "标签ID", "values": ["值"]}]}' },
+        ...messages.slice(-2) // 只传最后2条消息（工具调用和结果）
+      ];
+      const secondResponse = await this.llm.chat(secondMessages);
       console.log('[LLMManager] second response:', secondResponse);
       finalContent = secondResponse;
     }
