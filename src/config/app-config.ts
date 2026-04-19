@@ -61,7 +61,7 @@ export interface ExtensionMapping {
 export class AppConfigManager {
   private labelsConfig: LSMConfig | null = null;
   private extensions: Map<string, ExtensionMapping> = new Map();
-  private extensionsLoaded = false;
+  private allMappings: ExtensionMapping[] = [];  // 合并后的列表
   private extensionsSimplifiedText: string | null = null;
 
   private constructor(
@@ -138,58 +138,35 @@ export class AppConfigManager {
   }
 
   private load(): void {
-    // 解析 labels.yaml
+    // 1. 解析 labels.yaml
     if (fs.existsSync(this.labelsPath)) {
       const content = fs.readFileSync(this.labelsPath, 'utf8');
       const parsed = yaml.parse(content);
       this.labelsConfig = processConfigDefaults(parsed);
-      if (this.labelsConfig) {
-        this.labelsConfig.rawContent = content;
-      }
     }
-  }
 
-  /**
-   * 加载扩展标签配置
-   * 格式：items: [{condition, value}]
-   */
-  private loadExtensions(): void {
-    if (this.extensionsLoaded) return;
-
-    // 扩展配置从 labels.yaml 同级目录加载
+    // 2. 读取 extensions 目录下的所有扩展配置
     const extDir = path.join(path.dirname(this.labelsPath), 'extensions');
-    
-    if (!fs.existsSync(extDir)) {
-      this.extensionsLoaded = true;
-      return;
-    }
-
-    const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-    
-    for (const file of files) {
-      const filePath = path.join(extDir, file);
-      try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const parsed = yaml.parse(content);
-        if (parsed && parsed.id && parsed.items && Array.isArray(parsed.items)) {
-          const ext: ExtensionMapping = {
-            id: parsed.id,
-            name: parsed.name || parsed.id,
-            description: parsed.description,
-            items: parsed.items.map((item: any) => ({
-              condition: item.condition,
-              value: item.value,
-              description: item.description
-            }))
-          };
-          this.extensions.set(ext.id, ext);
+    if (fs.existsSync(extDir)) {
+      const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+      for (const file of files) {
+        const filePath = path.join(extDir, file);
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const parsed = yaml.parse(content);
+          if (parsed && parsed.id && parsed.items && Array.isArray(parsed.items)) {
+            this.extensions.set(parsed.id, parsed);
+          }
+        } catch (err) {
+          console.error(`[AppConfigManager] Failed to load extension ${file}:`, err);
         }
-      } catch (err) {
-        console.error(`[AppConfigManager] Failed to load extension ${file}:`, err);
       }
     }
 
-    this.extensionsLoaded = true;
+    // 3. 合并 labelsConfig.mappings 和 extensions 到 allMappings
+    const labelMappings = this.labelsConfig?.mappings || [];
+    const extensionMappings = Array.from(this.extensions.values());
+    this.allMappings = [...labelMappings, ...extensionMappings] as any[];
   }
 
   getDatabasePath(): string {
@@ -263,7 +240,6 @@ export class AppConfigManager {
    * 获取所有扩展标签
    */
   getExtensions(): ExtensionMapping[] {
-    if (!this.extensionsLoaded) this.loadExtensions();
     return Array.from(this.extensions.values());
   }
 
@@ -271,7 +247,6 @@ export class AppConfigManager {
    * 根据 ID 获取扩展标签
    */
   getExtensionById(id: string): ExtensionMapping | undefined {
-    if (!this.extensionsLoaded) this.loadExtensions();
     return this.extensions.get(id);
   }
 
@@ -280,7 +255,6 @@ export class AppConfigManager {
    * 返回description让LLM自行理解推导SQL
    */
   getExtensionDetail(extensionId: string, value: string): string | null {
-    if (!this.extensionsLoaded) this.loadExtensions();
     const ext = this.extensions.get(extensionId);
     if (!ext) return null;
 
@@ -297,62 +271,37 @@ export class AppConfigManager {
   }
 
   /**
-   * 获取扩展标签的工具定义
+   * 获取简化的 mappings 文本格式（使用 allMappings）
    */
-  getExtensionTools(): { name: string; description: string; params: { name: string; description: string; type: 'string' | 'number' | 'boolean'; required: boolean }[] }[] {
-    if (!this.extensionsLoaded) this.loadExtensions();
-
-    // 获取所有extensionId用于工具参数描述
-    const allExtensionIds = Array.from(this.extensions.keys()).join(', ');
-
-    return [{
-      name: 'get_extension_detail',
-      description: '获取标签详情，包括SQL示例和使用说明。当需要更详细地了解某个标签的含义和使用方式时调用此工具。',
-      params: [
-        {
-          name: 'extensionId',
-          description: `标签ID，可选值：${allExtensionIds}`,
-          type: 'string' as const,
-          required: true
-        },
-        {
-          name: 'value',
-          description: '要查询的标签值',
-          type: 'string' as const,
-          required: true
-        }
-      ]
-    }];
-  }
-
-  /**
-   * 获取简化的扩展标签文本格式
-   * 用于直接传给 AI，缓存结果
-   */
-  getExtensionsSimplifiedText(): string {
+  getMappingsSimplifiedText(): string {
     if (this.extensionsSimplifiedText) {
       return this.extensionsSimplifiedText;
     }
 
-    if (!this.extensionsLoaded) this.loadExtensions();
-
-    const simplified = Array.from(this.extensions.values()).map(ext => ({
-      id: ext.id,
-      name: ext.name,
-      description: ext.description,
-      values: ext.items.map(item => item.value).filter((v): v is string => !!v)
-    }));
-
-    this.extensionsSimplifiedText = simplified.map(ext => {
-      const lines = [
-        `id: ${ext.id}`,
-        `name: ${ext.name}`,
-        ext.description ? `description: ${ext.description}` : '',
-        `values: [${ext.values.join(', ')}]`
-      ].filter(Boolean);
+    const simplified = this.allMappings.map(mapping => {
+      const lines: string[] = [
+        `- id: ${mapping.id}`,
+        `  name: ${mapping.name}`
+      ];
+      
+      // 如果有 items，只列出 values
+      if (mapping.items && mapping.items.length > 0) {
+        const values = mapping.items.map(item => item.value);
+        lines.push(`  values: [${values.join(', ')}]`);
+      }
+      
       return lines.join('\n');
-    }).join('\n\n');
+    });
 
+    this.extensionsSimplifiedText = simplified.join('\n\n');
     return this.extensionsSimplifiedText;
+  }
+
+  /**
+   * 获取 extensions 完整配置
+   */
+  getExtensionDetails(neededExtensions: { id: string }[]): ExtensionMapping[] {
+    const ids = neededExtensions.map(e => e.id);
+    return this.allMappings.filter(m => ids.includes(m.id));
   }
 }

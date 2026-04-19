@@ -14,10 +14,7 @@ export type QueryMode = 'list' | 'detail';
 /**
  * AI 返回的扩展标签信息
  */
-export interface AIExtensions {
-  id: string;       // 扩展标签ID
-  values: string[]; // 匹配的值列表
-}
+export interface AIExtensions extends ExtensionMapping {}
 
 /**
  * 查询执行器返回结果
@@ -57,22 +54,12 @@ export class QueryExecutor {
     } else {
       // 列表模式：根据 AI 返回的扩展标签构建独立字段
       if (aiExtensions?.length) {
-        // 根据 AI 返回的 extensions 获取对应的配置
-        const extValues: Record<string, Set<string>> = {};
-        for (const ext of aiExtensions) {
-          extValues[ext.id] = new Set(ext.values);
-        }
-
-        // 收集扩展标签值
         extensionsResult = {};
-        for (const ext of this.extensions) {
-          const values = extValues[ext.id];
-          if (values?.size) {
-            extensionsResult[ext.name] = {
-              name: ext.name,
-              values: Array.from(values)
-            };
-          }
+        for (const ext of aiExtensions) {
+          extensionsResult[ext.name] = {
+            name: ext.name,
+            values: ext.items?.map(i => i.value) ?? []
+          };
         }
       }
     }

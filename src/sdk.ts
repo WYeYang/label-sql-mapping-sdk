@@ -84,13 +84,12 @@ export class LSMSDK {
     let explanation: string | undefined;
     let fullSqlStr = sql ?? '';
 
-    // 构建 extensions：外部传入的值 + AI 返回的 extensions
     let aiExtensions = this.extMerger.buildFromValues(options.extensions ?? []);
     if (query) {
       const result = await this.nlpQuery.execute(query);
       explanation = result.explanation;
-      fullSqlStr = result.sql;
-      aiExtensions = this.extMerger.merge(aiExtensions, result.extensions ?? []);
+      fullSqlStr = `SELECT * FROM cards WHERE ${result.where} LIMIT ${result.limit}`;
+      aiExtensions = [...aiExtensions, ...(result.extensions ?? [])];
     } else if (sql) {
       fullSqlStr = sql;
     } else {
