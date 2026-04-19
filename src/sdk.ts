@@ -87,9 +87,11 @@ export class LSMSDK {
     // 构建 extensions：外部传入的值 + AI 返回的 extensions
     let aiExtensions = this.extMerger.buildFromValues(options.extensions ?? []);
     if (query) {
+      // 使用自然语言查询
       const result = await this.nlpQuery.execute(query);
       explanation = result.explanation;
-      fullSqlStr = result.sql;
+      // 构建完整SQL（包含where条件和extensions处理）
+      fullSqlStr = this.nlpQuery.buildSQL(result, page);
       aiExtensions = this.extMerger.merge(aiExtensions, result.extensions ?? []);
     } else if (sql) {
       fullSqlStr = sql;

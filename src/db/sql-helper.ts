@@ -52,6 +52,15 @@ export function appendWhereCondition(sql: string, condition: string): string {
   }
 }
 
+/**
+ * 将多个WHERE条件合并为一个
+ */
+export function mergeWhereConditions(conditions: string[]): string {
+  if (conditions.length === 0) return '1=1';
+  if (conditions.length === 1) return conditions[0];
+  return conditions.map(c => `(${c})`).join(' AND ');
+}
+
 /** SQL转义：字段引用原样输出，字符串值加引号 */
 const esc = (v: string) => v.includes('.') ? v : `'${v.replace(/'/g, "''")}'`;
 

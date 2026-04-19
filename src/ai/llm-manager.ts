@@ -1,24 +1,19 @@
 // 大模型管理器
 
-import { LLM, Message } from './types';
-import { AppConfigManager } from '../config/app-config';
+import { LLM } from './types';
+import { AppConfigManager, UnifiedLabel } from '../config/app-config';
 
-export interface FilterResult {
-  sql: string;       // 完整SQL
-  explanation: string;
-}
-
-export interface ParseResult extends FilterResult {
-  extensions?: ExtensionInfo[];  // 用户需要的扩展标签
+export interface ParseResult {
+  where?: string;         // WHERE条件（不含WHERE关键字）
+  limit?: number;          // 限制数量
+  extensions?: ExtensionInfo[];  // 扩展标签
+  explanation?: string;   // 说明
 }
 
 export interface ExtensionInfo {
   id: string;       // 标签ID
-  values: string[]; // AI 识别的展示值列表
-  details?: string; // 详细信息（从工具调用获取）
+  values: string[]; // 匹配的值列表
 }
-
-type MessageWithTool = Message & { role: 'system' | 'user' | 'assistant' | 'tool' };
 
 /**
  * LLM Manager
@@ -35,86 +30,92 @@ export class LLMManager {
    * 返回完整SQL语句
    */
   async parseQuery(naturalLanguageQuery: string, schema: string): Promise<ParseResult> {
-    // 获取扩展标签简化配置
-    const extSimplifiedText = AppConfigManager.get().getExtensionsSimplifiedText();
-    const extensionTools = AppConfigManager.get().getExtensionTools();
+    const allMappings = AppConfigManager.get().getAllMappings();
+    const simplifiedText = allMappings.map(m => {
+      const values = m.items.map(i => i.value).filter(Boolean);
+      const desc = m.description ? `\n  description: ${m.description}` : '';
+      return `- id: ${m.id}\n  name: ${m.name}${desc}\n  values: [${values.join(', ')}]`;
+    }).join('\n\n');
 
-    console.log('[LLMManager] labels length:', schema.length, '| preview:', schema.substring(0, 200));
-    console.log('[LLMManager] extension tools:', extensionTools.length);
+    console.log('[LLMManager] parsing query:', naturalLanguageQuery);
 
-    const systemPrompt = `你是一个SQL查询生成器。
+    // 第一轮：LLM解析需要哪些标签
+    const firstPrompt = `你是一个SQL查询生成器。
 
-## labels 标签映射配置
-${schema}
+## 标签配置（合并后简版）
+${simplifiedText}
 
-## extensions 扩展标签配置（简版）
-${extSimplifiedText}
+## 用户查询
+${naturalLanguageQuery}
 
-## 处理规则
-1. extensions的item.condition会自动拼接为WHERE条件
-2. labels有items时，item.condition直接拼接到SQL；无items时根据condition含义自行推导
-3. 优先使用extensions/labels匹配，匹配不到时再用LIKE自行推导
-
-## 重要：工具调用
-遇到extensions标签时，**必须**先调用对应工具获取详细信息，根据详细信息中的description理解标签含义，再生成SQL。
-工具调用示例：
-- 调用 get_extension_detail(extensionId="标签ID", value="标签值") 获取详细说明
+## 任务
+分析用户查询，返回需要查询的标签ID列表。
 
 ## 输出格式（JSON）
 {
-  "sql": "完整SQL语句（SELECT开头，不含extensions条件）",
-  "explanation": "查询说明",
-  "extensions": [{"id": "标签ID", "values": ["匹配的值"]}]
+  "neededExtensions": [{"id": "标签ID"}, ...]
 }`;
 
-    const messages: MessageWithTool[] = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: `查询: ${naturalLanguageQuery}` }
-    ];
+    const firstResponse = await this.llm.chat([
+      { role: 'system' as const, content: firstPrompt },
+      { role: 'user' as const, content: naturalLanguageQuery }
+    ]);
 
-    // 第一轮：LLM决定是否调用工具
-    console.log('[LLMManager] calling chatWithTools with', extensionTools.length, 'tools');
-    const { content, toolCalls } = await this.llm.chatWithTools(messages, extensionTools);
-    console.log('[LLMManager] first response:', content, '| toolCalls:', JSON.stringify(toolCalls));
+    console.log('[LLMManager] first response:', firstResponse);
 
-    // 处理工具调用
-    let finalContent = content;
-    if (toolCalls.length > 0) {
-      for (const toolCall of toolCalls) {
-        const extensionId = toolCall.arguments.extensionId as string;
-        const value = toolCall.arguments.value as string;
-
-        console.log('[LLMManager] calling tool:', toolCall.name, 'extensionId:', extensionId, 'value:', value);
-
-        // 获取extension详情
-        const detail = AppConfigManager.get().getExtensionDetail(extensionId, value);
-        console.log('[LLMManager] extension detail:', detail);
-
-        if (detail) {
-          // 将工具结果作为消息追加
-          messages.push({
-            role: 'assistant',
-            content: `调用工具: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`
-          });
-          messages.push({
-            role: 'tool',
-            content: detail
-          });
-        }
-      }
-
-      // 第二轮：只传工具结果和简单指令，不传完整system prompt
-      const secondMessages = [
-        { role: 'system' as const, content: '根据工具返回的标签详情，生成对应的SQL。输出JSON格式：{"sql": "SQL语句", "explanation": "说明", "extensions": [{"id": "标签ID", "values": ["值"]}]}' },
-        ...messages.slice(-2) // 只传最后2条消息（工具调用和结果）
-      ];
-      const secondResponse = await this.llm.chat(secondMessages);
-      console.log('[LLMManager] second response:', secondResponse);
-      finalContent = secondResponse;
+    let neededExtensions: { id: string }[] = [];
+    try {
+      const parsed = JSON.parse(firstResponse);
+      neededExtensions = parsed.neededExtensions || [];
+    } catch {
+      console.error('[LLMManager] failed to parse first response');
     }
 
-    const result: ParseResult = JSON.parse(finalContent);
-    result.extensions = result.extensions || [];
-    return result;
+    // 代码模拟工具调用：批量获取完整配置
+    const extensionDetails = AppConfigManager.get().getMappingConfigs(
+      neededExtensions.map(e => e.id)
+    );
+    console.log('[LLMManager] extension configs:', extensionDetails);
+
+    // 格式化标签详情供 LLM 使用
+    const formatMapping = (m: UnifiedLabel) => {
+      const values = m.items.map(i => i.value).filter(Boolean);
+      const desc = m.description ? `\n  description: ${m.description}` : '';
+      return `- id: ${m.id}\n  name: ${m.name}${desc}\n  values: [${values.join(', ')}]`;
+    };
+
+    // 第二轮：LLM生成完整SQL
+    const secondPrompt = `你是一个SQL查询生成器。
+
+## 用户查询
+${naturalLanguageQuery}
+
+## 标签详情
+${extensionDetails.map(formatMapping).join('\n\n')}
+
+## 处理规则
+- 根据标签详情中的description和values，理解标签含义
+- condition字段表示需要通过extensions返回的条件
+
+## 输出格式（JSON）
+{
+  "where": "WHERE条件片段（不含WHERE关键词）",
+  "limit": 根据用户意图推断的返回数量,
+  "extensions": [{"id": "标签ID", "values": ["匹配的值"]}],
+  "explanation": "查询说明"
+}`;
+
+    const secondResponse = await this.llm.chat([
+      { role: 'system' as const, content: secondPrompt },
+      { role: 'user' as const, content: naturalLanguageQuery }
+    ]);
+
+    console.log('[LLMManager] second response:', secondResponse);
+
+    try {
+      return JSON.parse(secondResponse);
+    } catch {
+      return { explanation: '解析失败' };
+    }
   }
 }

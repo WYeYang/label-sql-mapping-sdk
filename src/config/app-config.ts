@@ -49,20 +49,23 @@ function findLsmPackage(startDir: string, packageName?: string): string | null {
 }
 
 /**
- * 扩展标签映射
+ * 统一标签映射
  */
-export interface ExtensionMapping {
-  id: string;           // 标签唯一ID
-  name: string;          // 标签展示名称
-  description?: string; // 标签描述
-  items: MappingItem[];  // 映射项数组
+export interface UnifiedLabel {
+  id: string;
+  name: string;
+  description?: string;
+  items: MappingItem[];
 }
+
+/**
+ * 兼容旧接口
+ */
+export type ExtensionMapping = UnifiedLabel;
 
 export class AppConfigManager {
   private labelsConfig: LSMConfig | null = null;
-  private extensions: Map<string, ExtensionMapping> = new Map();
-  private extensionsLoaded = false;
-  private extensionsSimplifiedText: string | null = null;
+  private allMappings: UnifiedLabel[] = [];
 
   private constructor(
     public readonly labelsPath: string,
@@ -138,7 +141,7 @@ export class AppConfigManager {
   }
 
   private load(): void {
-    // 解析 labels.yaml
+    // 1. 解析 labels.yaml
     if (fs.existsSync(this.labelsPath)) {
       const content = fs.readFileSync(this.labelsPath, 'utf8');
       const parsed = yaml.parse(content);
@@ -147,49 +150,31 @@ export class AppConfigManager {
         this.labelsConfig.rawContent = content;
       }
     }
-  }
 
-  /**
-   * 加载扩展标签配置
-   * 格式：items: [{condition, value}]
-   */
-  private loadExtensions(): void {
-    if (this.extensionsLoaded) return;
-
-    // 扩展配置从 labels.yaml 同级目录加载
+    // 2. 加载扩展标签配置（从 labels.yaml 同级 extensions 目录）
+    const extensions: UnifiedLabel[] = [];
     const extDir = path.join(path.dirname(this.labelsPath), 'extensions');
-    
-    if (!fs.existsSync(extDir)) {
-      this.extensionsLoaded = true;
-      return;
-    }
-
-    const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
-    
-    for (const file of files) {
-      const filePath = path.join(extDir, file);
-      try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const parsed = yaml.parse(content);
-        if (parsed && parsed.id && parsed.items && Array.isArray(parsed.items)) {
-          const ext: ExtensionMapping = {
-            id: parsed.id,
-            name: parsed.name || parsed.id,
-            description: parsed.description,
-            items: parsed.items.map((item: any) => ({
-              condition: item.condition,
-              value: item.value,
-              description: item.description
-            }))
-          };
-          this.extensions.set(ext.id, ext);
+    if (fs.existsSync(extDir)) {
+      const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+      for (const file of files) {
+        const filePath = path.join(extDir, file);
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const parsed = yaml.parse(content);
+          if (parsed && parsed.id && parsed.items && Array.isArray(parsed.items)) {
+            extensions.push(parsed as UnifiedLabel);
+          }
+        } catch (err) {
+          console.error(`[AppConfigManager] Failed to load extension ${file}:`, err);
         }
-      } catch (err) {
-        console.error(`[AppConfigManager] Failed to load extension ${file}:`, err);
       }
     }
 
-    this.extensionsLoaded = true;
+    // 3. 合并 labels + extensions
+    this.allMappings = [
+      ...(this.labelsConfig?.mappings?.filter(m => m.items) || []),
+      ...extensions
+    ] as UnifiedLabel[];
   }
 
   getDatabasePath(): string {
@@ -263,96 +248,35 @@ export class AppConfigManager {
    * 获取所有扩展标签
    */
   getExtensions(): ExtensionMapping[] {
-    if (!this.extensionsLoaded) this.loadExtensions();
-    return Array.from(this.extensions.values());
+    return this.allMappings;
   }
 
   /**
    * 根据 ID 获取扩展标签
    */
   getExtensionById(id: string): ExtensionMapping | undefined {
-    if (!this.extensionsLoaded) this.loadExtensions();
-    return this.extensions.get(id);
+    return this.allMappings.find(m => m.id === id);
   }
 
   /**
-   * 获取扩展标签详情（用于工具调用）
-   * 返回description让LLM自行理解推导SQL
+   * 获取标签配置列表（仅用于 AI 查询）
    */
-  getExtensionDetail(extensionId: string, value: string): string | null {
-    if (!this.extensionsLoaded) this.loadExtensions();
-    const ext = this.extensions.get(extensionId);
-    if (!ext) return null;
-
-    const item = ext.items.find(i => i.value === value);
-    if (!item) return null;
-
-    // 返回描述信息，让LLM根据描述自行理解并推导SQL
-    return JSON.stringify({
-      extensionId: ext.id,
-      extensionName: ext.name,
-      value: item.value,
-      description: item.description || '无description',
-    });
+  getMappingConfigs(ids: string[]): UnifiedLabel[] {
+    const map = new Map(this.allMappings.map(m => [m.id, m]));
+    return ids.map(id => map.get(id)).filter((m): m is UnifiedLabel => !!m);
   }
 
   /**
-   * 获取扩展标签的工具定义
+   * 根据 ID 获取标签（仅用于 AI 查询）
    */
-  getExtensionTools(): { name: string; description: string; params: { name: string; description: string; type: 'string' | 'number' | 'boolean'; required: boolean }[] }[] {
-    if (!this.extensionsLoaded) this.loadExtensions();
-
-    // 获取所有extensionId用于工具参数描述
-    const allExtensionIds = Array.from(this.extensions.keys()).join(', ');
-
-    return [{
-      name: 'get_extension_detail',
-      description: '获取标签详情，包括SQL示例和使用说明。当需要更详细地了解某个标签的含义和使用方式时调用此工具。',
-      params: [
-        {
-          name: 'extensionId',
-          description: `标签ID，可选值：${allExtensionIds}`,
-          type: 'string' as const,
-          required: true
-        },
-        {
-          name: 'value',
-          description: '要查询的标签值',
-          type: 'string' as const,
-          required: true
-        }
-      ]
-    }];
+  getMapping(id: string): UnifiedLabel | undefined {
+    return this.allMappings.find(m => m.id === id);
   }
 
   /**
-   * 获取简化的扩展标签文本格式
-   * 用于直接传给 AI，缓存结果
+   * 获取所有标签（仅用于 AI 查询）
    */
-  getExtensionsSimplifiedText(): string {
-    if (this.extensionsSimplifiedText) {
-      return this.extensionsSimplifiedText;
-    }
-
-    if (!this.extensionsLoaded) this.loadExtensions();
-
-    const simplified = Array.from(this.extensions.values()).map(ext => ({
-      id: ext.id,
-      name: ext.name,
-      description: ext.description,
-      values: ext.items.map(item => item.value).filter((v): v is string => !!v)
-    }));
-
-    this.extensionsSimplifiedText = simplified.map(ext => {
-      const lines = [
-        `id: ${ext.id}`,
-        `name: ${ext.name}`,
-        ext.description ? `description: ${ext.description}` : '',
-        `values: [${ext.values.join(', ')}]`
-      ].filter(Boolean);
-      return lines.join('\n');
-    }).join('\n\n');
-
-    return this.extensionsSimplifiedText;
+  getAllMappings(): UnifiedLabel[] {
+    return this.allMappings;
   }
 }
