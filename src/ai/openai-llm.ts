@@ -56,7 +56,7 @@ export class OpenAILLM implements LLM {
       temperature: this.temperature,
       max_tokens: this.maxTokens,
       tools: openaiTools,
-      tool_choice: { type: "function", function: { name: tools[0].name } } as any
+      tool_choice: 'auto'
     });
 
     const message = response.choices[0].message;
