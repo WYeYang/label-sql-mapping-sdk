@@ -58,7 +58,7 @@ ${extSimplifiedText}
 ## 重要：工具调用
 遇到extensions标签时，**必须**先调用对应工具获取详细信息，根据详细信息中的description理解标签含义，再生成SQL。
 工具调用示例：
-- 用户查询包含效果类型时 → 调用 get_effect_type_detail(value="效果类型名称") 获取详细说明
+- 调用 get_extension_detail(extensionId="标签ID", value="标签值") 获取详细说明
 
 ## 输出格式（JSON）
 {
@@ -81,13 +81,13 @@ ${extSimplifiedText}
     let finalContent = content;
     if (toolCalls.length > 0) {
       for (const toolCall of toolCalls) {
-        const extId = toolCall.name.replace('get_', '').replace('_detail', '');
+        const extensionId = toolCall.arguments.extensionId as string;
         const value = toolCall.arguments.value as string;
 
-        console.log('[LLMManager] calling tool:', toolCall.name, 'value:', value);
+        console.log('[LLMManager] calling tool:', toolCall.name, 'extensionId:', extensionId, 'value:', value);
 
         // 获取extension详情
-        const detail = AppConfigManager.get().getExtensionDetail(extId, value);
+        const detail = AppConfigManager.get().getExtensionDetail(extensionId, value);
         console.log('[LLMManager] extension detail:', detail);
 
         if (detail) {

@@ -302,18 +302,27 @@ export class AppConfigManager {
   getExtensionTools(): { name: string; description: string; params: { name: string; description: string; type: 'string' | 'number' | 'boolean'; required: boolean }[] }[] {
     if (!this.extensionsLoaded) this.loadExtensions();
 
-    return Array.from(this.extensions.values()).map(ext => ({
-      name: `get_${ext.id}_detail`,
-      description: `获取${ext.name}标签的详细信息和使用说明。当需要更详细地了解某个${ext.name}标签的含义和使用方式时调用此工具。`,
+    // 获取所有extensionId用于工具参数描述
+    const allExtensionIds = Array.from(this.extensions.keys()).join(', ');
+
+    return [{
+      name: 'get_extension_detail',
+      description: '获取标签详情，包括SQL示例和使用说明。当需要更详细地了解某个标签的含义和使用方式时调用此工具。',
       params: [
         {
+          name: 'extensionId',
+          description: `标签ID，可选值：${allExtensionIds}`,
+          type: 'string' as const,
+          required: true
+        },
+        {
           name: 'value',
-          description: `要查询的${ext.name}值，如：${ext.items.map(i => i.value).filter(Boolean).slice(0, 5).join('、')}等`,
+          description: '要查询的标签值',
           type: 'string' as const,
           required: true
         }
       ]
-    }));
+    }];
   }
 
   /**
