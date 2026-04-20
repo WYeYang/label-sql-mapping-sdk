@@ -3,13 +3,13 @@
 import * as dotenv from 'dotenv';
 import { Database, DatabaseFactory } from './db';
 import { QueryExecutor, QueryMode } from './db/query-executor';
+import { ExtensionMerger } from './ai/extension-merger';
 import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
 import { LLM } from './ai/types';
 import { AppConfigManager } from './config/app-config';
 import { SqlHelper, appendWhereCondition } from './db/sql-helper';
 import { QueryResult } from './db/types';
-import { buildWhereConditions } from './ai/extension-merger';
 
 dotenv.config();
 
@@ -33,6 +33,7 @@ export class LSMSDK {
   private readonly database;
   private readonly llmManager: LLMManager;
   private readonly queryExecutor: QueryExecutor;
+  private readonly extMerger: ExtensionMerger;
 
   constructor(options?: LSMSDKOptions) {
     const appConfigManager = AppConfigManager.new(options?.configPath, options?.sdkConfigPath);
@@ -55,6 +56,7 @@ export class LSMSDK {
     const sqlHelper = SqlHelper.create(labelsConfig);
     sqlHelper.setExtensions(extensions);
     this.queryExecutor = new QueryExecutor(this.database, sqlHelper, extensions);
+    this.extMerger = new ExtensionMerger(extensions);
   }
 
   /**
@@ -79,33 +81,35 @@ export class LSMSDK {
     let explanation: string | undefined;
     let fullSqlStr = sql ?? '';
 
+    // 构建 extensions：外部传入的值 + AI 返回的 extensions
+    let aiExtensions = this.extMerger.buildFromValues(options.extensions ?? []);
     if (query) {
       const result = await this.llmManager.parseQuery(query);
       explanation = result.explanation;
       
-      // 使用 LLM 生成的 WHERE 条件
-      const llmWhere = result.where || '1=1';
-      fullSqlStr = `SELECT * FROM cards WHERE ${llmWhere} LIMIT ${result.limit}`;
+      // 合并 extensions
+      aiExtensions = [...aiExtensions, ...(result.extensions ?? [])];
       
-      // 解析 extensions 获取 condition
-      const aiExtensions = AppConfigManager.get().findConditions(result.extensions || []);
-      
-      // 根据 extensions 构建 WHERE 条件并拼接到 SQL
-      const whereCondition = buildWhereConditions(aiExtensions);
-      if (whereCondition) {
-        fullSqlStr = appendWhereCondition(fullSqlStr, whereCondition);
-      }
+      // 构建完整SQL
+      let fullSqlStr = `SELECT * FROM cards`;
+      if (result.where) fullSqlStr += ` WHERE ${result.where}`;
+      if (result.limit) fullSqlStr += ` LIMIT ${result.limit}`;
     } else if (sql) {
       fullSqlStr = sql;
     } else {
       throw new Error('请提供 query 或 sql 参数');
     }
 
+    // 根据 extensions 构建 WHERE 条件并拼接到 SQL
+    const whereCondition = this.extMerger.buildWhereConditions(aiExtensions);
+    if (whereCondition) {
+      fullSqlStr = appendWhereCondition(fullSqlStr, whereCondition);
+    }
+
     if (!fullSqlStr.trim()) {
       throw new Error('SQL不能为空');
     }
 
-    const aiExtensions = AppConfigManager.get().findConditions([]);
     const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize, mode, aiExtensions);
     
     return {

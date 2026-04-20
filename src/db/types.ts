@@ -1,6 +1,7 @@
 // 数据库操作类型定义
 
 import { DatabaseType } from '../config';
+import type { ExtensionInfo } from '../ai/extension-merger';
 
 /**
  * 数据库连接配置
@@ -18,14 +19,6 @@ export interface DBQueryResult {
 }
 
 /**
- * 扩展标签值
- */
-export interface ExtensionValue {
-  name: string;     // 标签名
-  values: string[]; // 值列表
-}
-
-/**
  * SDK 统一查询结果
  */
 export interface QueryResult {
@@ -37,7 +30,7 @@ export interface QueryResult {
   totalPages: number;
   explanation?: string;
   /** 扩展标签（列表模式下独立返回） */
-  extensions?: Record<string, ExtensionValue>;
+  extensions?: ExtensionInfo[];
 }
 
 /**

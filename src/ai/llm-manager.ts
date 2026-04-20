@@ -2,27 +2,19 @@
 
 import { LLM } from './types';
 import { AppConfigManager } from '../config/app-config';
+import { ExtensionInfo } from './extension-merger';
 
+/**
+ * LLM 解析结果
+ */
 export interface ParseResult {
+  /** 预处理 WHERE 条件 */
   where: string;
-  limit: number;
-  explanation: string;
-  extensions: any[];
-}
-
-export interface Stage1Result {
-  /** 能直接生成的预处理 WHERE 条件 */
-  where: string;
-  /** limit */
   limit?: number;
-  /** explanation */
   explanation?: string;
   /** 能直接确定的 id-values 绑定 */
-  extensions: {
-    id: string;
-    values: string[];
-  }[];
-  /** 无法匹配、需交给Stage2处理的关键词 */
+  extensions: ExtensionInfo[];
+  /** 无法匹配、需交给 Stage2 处理的关键词 */
   keywords: string[];
 }
 
@@ -59,12 +51,7 @@ export class LLMManager {
     );
     console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
 
-    return {
-      where: stage2Result.where || '',
-      limit: stage2Result.limit || 10,
-      explanation: stage2Result.explanation || '',
-      extensions: stage2Result.extensions || []
-    };
+    return stage2Result;
   }
 
   /**
@@ -73,7 +60,7 @@ export class LLMManager {
   private async stage1(
     query: string, 
     mainMappingsText: string
-  ): Promise<Stage1Result> {
+  ): Promise<ParseResult> {
     const systemPrompt = `你是一个SQL查询分析器。
 
 ## 主配置（id, name, description, values）
@@ -101,7 +88,7 @@ ${mainMappingsText}
     ]);
 
     const jsonStr = response;
-    const result = JSON.parse(jsonStr) as Stage1Result;
+    const result = JSON.parse(jsonStr) as ParseResult;
     result.where = result.where || '';
     result.extensions = result.extensions || [];
     result.keywords = result.keywords || [];
@@ -116,8 +103,8 @@ ${mainMappingsText}
     matchedItemsText: string,
     keywords: string[],
     stage1Where: string,
-    stage1Extensions: { id: string; values: string[] }[]
-  ): Promise<Stage1Result> {
+    stage1Extensions: ExtensionInfo[]
+  ): Promise<ParseResult> {
     const stage1ExtText = stage1Extensions.length > 0
       ? stage1Extensions.map(e => `  - id: ${e.id}, values: ${e.values.join(', ')}`).join('\n')
       : '(无)';
@@ -163,7 +150,7 @@ ${matchedItemsText || '(无)'}
     ]);
 
     const jsonStr = response;
-    const result = JSON.parse(jsonStr) as Stage1Result;
+    const result = JSON.parse(jsonStr) as ParseResult;
 
     return result;
   }
