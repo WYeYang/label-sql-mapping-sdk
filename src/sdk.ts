@@ -49,7 +49,7 @@ export interface LSMSDKOptions {
  * │                                                                      │
  * │ 4. 构建 SQL                                                          │
  * │    └─ base: "SELECT * FROM cards"                                   │
- * │    └─ AI where: "atk >= 1800" (如果有)                               │
+ * │    └─ AI where: "field >= 100" (如果有)                               │
  * │    └─ 代码拼接: extMerger.buildWhereConditions(aiExtensions)         │
  * │        └─ 根据 extensions 的 id-values 查配置，拼接 WHERE            │
  * │    └─ limit: AI 返回的 limit (如果有)                                │

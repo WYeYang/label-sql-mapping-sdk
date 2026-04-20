@@ -83,7 +83,7 @@ ${mainMappingsText}
 分析用户的自然语言查询，分三类处理：
 
 1. **where（能直接生成WHERE条件的，如数值比较）**
-2. **extensions（能直接确定id-values绑定的，如属性=光）**
+2. **extensions（能直接确定id-values绑定的，如type=书籍）**
 3. **keywords（无法匹配的词，交给Stage2处理）**
 
 ## 输出格式（JSON）
