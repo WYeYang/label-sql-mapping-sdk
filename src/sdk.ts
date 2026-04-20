@@ -66,6 +66,7 @@ export class LSMSDK {
   private readonly llmManager: LLMManager;
   private readonly queryExecutor: QueryExecutor;
   private readonly extMerger: ExtensionMerger;
+  private readonly sqlHelper: SqlHelper;
 
   constructor(options?: LSMSDKOptions) {
     const appConfigManager = AppConfigManager.new(options?.configPath, options?.sdkConfigPath);
@@ -85,9 +86,9 @@ export class LSMSDK {
     this.database = DatabaseFactory.create(appConfigManager, labelsConfig);
     this.llmManager = new LLMManager(llm);
     
-    const sqlHelper = SqlHelper.create(labelsConfig);
-    sqlHelper.setExtensions(extensions);
-    this.queryExecutor = new QueryExecutor(this.database, sqlHelper, extensions);
+    this.sqlHelper = SqlHelper.create(labelsConfig);
+    this.sqlHelper.setExtensions(extensions);
+    this.queryExecutor = new QueryExecutor(this.database, this.sqlHelper, extensions);
     this.extMerger = new ExtensionMerger(extensions);
   }
 
@@ -122,8 +123,18 @@ export class LSMSDK {
       // 合并 extensions
       aiExtensions = [...aiExtensions, ...(result.extensions ?? [])];
       
-      // 构建完整SQL
-      let fullSqlStr = `SELECT * FROM cards`;
+      // 构建完整SQL（使用 fromClause 避免硬编码表名）
+      // Stage2 返回的 where 可能已带 WHERE 前缀，需判断处理
+      if (result.where) {
+        const where = result.where.trim();
+        if (where.toUpperCase().startsWith('WHERE ')) {
+          fullSqlStr = `SELECT ${this.sqlHelper.fromClause} ${where}`;
+        } else {
+          fullSqlStr = `SELECT ${this.sqlHelper.fromClause} WHERE ${where}`;
+        }
+      } else {
+        fullSqlStr = `SELECT ${this.sqlHelper.fromClause}`;
+      }
       if (result.where) fullSqlStr += ` WHERE ${result.where}`;
       if (result.limit) fullSqlStr += ` LIMIT ${result.limit}`;
     } else if (sql) {

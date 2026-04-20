@@ -95,12 +95,18 @@ ${mainMappingsText}
   "keywords": ["无法匹配的关键词"]
 }`;
 
+    console.log('\n========== Stage1 输入 ==========');
+    console.log('\n系统提示词:\n' + systemPrompt);
+    console.log('\n用户消息: 查询: ' + query);
+
     const response = await this.llm.chat([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `查询: ${query}` }
     ]);
 
     const jsonStr = response;
+    console.log('\n========== Stage1 输出 ==========');
+    console.log(jsonStr);
     const result = JSON.parse(jsonStr) as Stage1Result;
     result.where = result.where || '';
     result.extensions = result.extensions || [];
@@ -145,7 +151,7 @@ ${matchedItemsText || '(无)'}
 
 ## 输出格式（JSON）
 {
-  "where": "WHERE条件",
+  "where": "筛选条件，整体用一对括号包裹，如 (field = 100 AND type = 'book')，不带WHERE关键字",
   "limit": 用户指定的数量，没指定返回 null,
   "explanation": "查询说明",
   "extensions": [
@@ -153,12 +159,17 @@ ${matchedItemsText || '(无)'}
   ]
 }`;
 
+    console.log('\n========== Stage2 输入 ==========');
+    console.log(systemPrompt);
+
     const response = await this.llm.chat([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `根据上述配置输出 id 和 values 绑定` }
     ]);
 
     const jsonStr = response;
+    console.log('\n========== Stage2 输出 ==========');
+    console.log(jsonStr);
     const result = JSON.parse(jsonStr) as Stage1Result;
 
     return result;

@@ -96,6 +96,7 @@ export class AppConfigManager {
   private extensions: Map<string, ExtensionMapping> = new Map();
   private allMappings: ExtensionMapping[] = [];  // 合并后的列表
   private extensionsSimplifiedText: string | null = null;
+  private labelsYamlContent: string | null = null;  // 缓存 labels.yaml 内容
 
   private constructor(
     public readonly labelsPath: string,
@@ -173,8 +174,8 @@ export class AppConfigManager {
   private load(): void {
     // 1. 解析 labels.yaml
     if (fs.existsSync(this.labelsPath)) {
-      const content = fs.readFileSync(this.labelsPath, 'utf8');
-      const parsed = yaml.parse(content);
+      this.labelsYamlContent = fs.readFileSync(this.labelsPath, 'utf8');
+      const parsed = yaml.parse(this.labelsYamlContent);
       this.labelsConfig = processConfigDefaults(parsed);
     }
 
@@ -284,51 +285,14 @@ export class AppConfigManager {
   }
 
   /**
-   * 获取扩展标签详情（用于工具调用）
-   * 返回description让LLM自行理解推导SQL
-   */
-  getExtensionDetail(extensionId: string, value: string): string | null {
-    const ext = this.extensions.get(extensionId);
-    if (!ext) return null;
-
-    const item = ext.items.find(i => i.value === value);
-    if (!item) return null;
-
-    // 返回描述信息，让LLM根据描述自行理解并推导SQL
-    return JSON.stringify({
-      extensionId: ext.id,
-      extensionName: ext.name,
-      value: item.value,
-      description: item.description || '无description',
-    });
-  }
-
-  /**
-   * 获取主配置的简化文本（带 values 和 description）
+   * 获取 labels.yaml 完整内容（缓存）
    */
   getMainMappingsSimplifiedText(): string {
-    const mainMappings = this.labelsConfig?.mappings || [];
-    return mainMappings.map(mapping => {
-      const lines: string[] = [
-        `- id: ${mapping.id}`,
-        `  name: ${mapping.name}`
-      ];
-      
-      if (mapping.description) {
-        lines.push(`  description: ${mapping.description}`);
-      }
-      
-      if (mapping.items && mapping.items.length > 0) {
-        const values = mapping.items.map(item => item.value);
-        lines.push(`  values: [${values.join(', ')}]`);
-      }
-      
-      return lines.join('\n');
-    }).join('\n\n');
+    return this.labelsYamlContent || '';
   }
 
   /**
-   * 用 keywords 搜索所有 items，返回匹配的 mapping（只返回有 items 的 mapping）
+   * 用 keywords 搜索 extension mappings（只搜索 extensions）
    */
   searchByKeywords(keywords: string[]): string {
     if (!keywords.length) return '';
@@ -336,8 +300,8 @@ export class AppConfigManager {
     // 按 mapping 分组
     const matched: Map<string, any[]> = new Map();
     
-    for (const mapping of this.allMappings) {
-      // 跳过没有 items 的 mapping（desc、name 等让 LLM 自己生成 WHERE）
+    for (const mapping of this.extensions.values()) {
+      // 跳过没有 items 的 mapping
       if (!mapping.items || mapping.items.length === 0) {
         continue;
       }
