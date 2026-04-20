@@ -20,6 +20,32 @@ type QueryExecResult = Pick<QueryResult, 'data' | 'total' | 'page' | 'pageSize' 
  * 查询执行器
  * 封装 SQL 执行和结果处理逻辑
  */
+/**
+ * 查询执行器
+ * 
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │                         execute()                                   │
+ * ├─────────────────────────────────────────────────────────────────────┤
+ * │  输入: fullSqlStr, page, pageSize, mode, aiExtensions               │
+ * │                                                                      │
+ * │  1. 规范化 SQL                                                        │
+ * │     └─ replaceLimit: AI LIMIT > pageSize 时替换为 pageSize            │
+ * │     └─ extractWhereAndAfter: 提取 WHERE 及之后内容                     │
+ * │                                                                      │
+ * │  2. COUNT 查询                                                        │
+ * │     └─ buildCountSql: "SELECT COUNT(*) FROM ..."                     │
+ * │                                                                      │
+ * │  3. 扩展标签处理                                                       │
+ * │     ├─ detail 模式: extMappings = this.extensions (全部)             │
+ * │     └─ list 模式: extensionsResult = aiExtensions (直接返回)         │
+ * │                                                                      │
+ * │  4. 构建并执行查询                                                     │
+ * │     └─ SELECT 主字段 [扩展字段] FROM ... WHERE ... LIMIT ...          │
+ * │                                                                      │
+ * │  输出: { data, total, page, pageSize, totalPages, extensions }       │
+ * └─────────────────────────────────────────────────────────────────────┘
+ */
+
 export class QueryExecutor {
   constructor(
     private database: Database,

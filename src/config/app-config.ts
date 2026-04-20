@@ -58,6 +58,39 @@ export interface ExtensionMapping {
   items: MappingItem[];  // 映射项数组
 }
 
+/**
+ * 应用配置管理器
+ * 
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │                          配置加载流程                                │
+ * ├─────────────────────────────────────────────────────────────────────┤
+ * │                                                                      │
+ * │  new() 静态方法                                                      │
+ * │  ├─ 查找 labels.yaml                                                 │
+ * │  │   ├─ 参数指定路径                                                  │
+ * │  │   ├─ 参数指定包名 (lsm-xxx)                                        │
+ * │  │   └─ 空参数自动查找 node_modules/lsm-*                             │
+ * │  │                                                                   │
+ * │  └─ 查找 lsm-sdk-js.yaml                                             │
+ * │      ├─ 参数指定路径                                                  │
+ * │      └─ 从 node_modules 上级向上查找                                   │
+ * │                                                                      │
+ * │  load() 实例方法                                                     │
+ * │  ├─ 解析 labels.yaml → this.labelsConfig                             │
+ * │  └─ 读取 extensions/*.yaml → this.extensions Map                     │
+ * │                                                                      │
+ * │  提供方法:                                                            │
+ * │  ├─ getDatabasePath() → 数据库文件路径                               │
+ * │  ├─ getLLMConfig() → LLM 配置 (apiKey/apiUrl/model)                  │
+ * │  ├─ getLabelsConfig() → 完整配置对象                                 │
+ * │  ├─ getExtensions() → ExtensionMapping[]                            │
+ * │  ├─ getExtensionById(id) → ExtensionMapping                         │
+ * │  ├─ getMainMappingsSimplifiedText() → Stage1 提示词                  │
+ * │  └─ searchByKeywords(keywords) → 匹配的 items 文本                   │
+ * │                                                                      │
+ * └─────────────────────────────────────────────────────────────────────┘
+ */
+
 export class AppConfigManager {
   private labelsConfig: LSMConfig | null = null;
   private extensions: Map<string, ExtensionMapping> = new Map();

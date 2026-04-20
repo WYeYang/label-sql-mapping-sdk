@@ -21,6 +21,33 @@ export interface ParseResult {
 /**
  * LLM Manager - 两阶段查询
  */
+/**
+ * LLM 管理器 - 两阶段查询
+ * 
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │                        parseQuery() 入口                           │
+ * ├─────────────────────────────────────────────────────────────────────┤
+ * │                                                                      │
+ * │  Stage1: 预处理                                                     │
+ * │  ├─ 输入: 用户查询 + 主配置(id/name/description/values)               │
+ * │  ├─ LLM 区分三类:                                                    │
+ * │  │   ├─ where: 能直接生成 WHERE 的（如 atk >= 1800）                  │
+ * │  │   ├─ extensions: 能直接确定 id-values 的（如 属性=光）             │
+ * │  │   └─ keywords: 无法匹配的词（需交给 Stage2）                        │
+ * │  └─ 输出: { where, extensions, keywords }                            │
+ * │                                                                      │
+ * │  代码: 用 keywords 搜索匹配的 items                                   │
+ * │  ├─ 输入: keywords[]                                                  │
+ * │  └─ 输出: 匹配的 items 文本（id/name/values/description）             │
+ * │                                                                      │
+ * │  Stage2: 补充 extensions                                            │
+ * │  ├─ 输入: Stage1 结果 + 匹配的 items                                 │
+ * │  ├─ LLM 根据 keywords 和 items 补充 extensions                        │
+ * │  └─ 输出: 最终 { where, extensions, limit, explanation }              │
+ * │                                                                      │
+ * └─────────────────────────────────────────────────────────────────────┘
+ */
+
 export class LLMManager {
   private llm: LLM;
 

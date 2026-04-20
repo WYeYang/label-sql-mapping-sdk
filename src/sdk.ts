@@ -29,6 +29,38 @@ export interface LSMSDKOptions {
   llm?: LLM;
 }
 
+/**
+ * SDK 核心 - 查询流程
+ * 
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │                           query() 入口                              │
+ * ├─────────────────────────────────────────────────────────────────────┤
+ * │ 1. 外部 extensions → extMerger.buildFromValues()                     │
+ * │    └─ 输入: ["光", "战士族"]                                         │
+ * │    └─ 输出: ExtensionInfo[] { id, values }                          │
+ * │                                                                      │
+ * │ 2. 自然语言查询 → llmManager.parseQuery()                           │
+ * │    └─ Stage1: 预处理，输出 where / extensions / keywords             │
+ * │    └─ 代码: 用 keywords 搜索 items                                   │
+ * │    └─ Stage2: 补充 extensions，返回最终结果                          │
+ * │                                                                      │
+ * │ 3. 合并 extensions                                                   │
+ * │    └─ AI extensions + 外部 extensions → aiExtensions[]               │
+ * │                                                                      │
+ * │ 4. 构建 SQL                                                          │
+ * │    └─ base: "SELECT * FROM cards"                                   │
+ * │    └─ AI where: "atk >= 1800" (如果有)                               │
+ * │    └─ 代码拼接: extMerger.buildWhereConditions(aiExtensions)         │
+ * │        └─ 根据 extensions 的 id-values 查配置，拼接 WHERE            │
+ * │    └─ limit: AI 返回的 limit (如果有)                                │
+ * │                                                                      │
+ * │ 5. 执行查询 → queryExecutor.execute()                               │
+ * │    └─ count: 总数                                                    │
+ * │    └─ data: 分页数据                                                 │
+ * │    └─ extensions: 返回的扩展标签信息                                 │
+ * └─────────────────────────────────────────────────────────────────────┘
+ */
+
 export class LSMSDK {
   private readonly database;
   private readonly llmManager: LLMManager;
