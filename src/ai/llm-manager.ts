@@ -45,6 +45,17 @@ export class LLMManager {
     const stage1Result = await this.stage1(naturalLanguageQuery, mainMappingsText);
     console.log('[LLMManager] stage1:', JSON.stringify(stage1Result));
 
+    // 如果没有关键词，直接返回 Stage1 结果，跳过 Stage2
+    if (!stage1Result.keywords || stage1Result.keywords.length === 0) {
+      console.log('[LLMManager] 无关键词，跳过 Stage2');
+      return {
+        where: stage1Result.where || '',
+        limit: stage1Result.limit || 10,
+        explanation: stage1Result.explanation || '',
+        extensions: []
+      };
+    }
+
     // 代码用关键词搜索 items
     const matchedItemsText = AppConfigManager.get().searchByKeywords(stage1Result.keywords);
     console.log('[LLMManager] matched items:\n', matchedItemsText);
@@ -54,7 +65,8 @@ export class LLMManager {
       naturalLanguageQuery,
       matchedItemsText,
       stage1Result.keywords,
-      stage1Result.where
+      stage1Result.where,
+      stage1Result.explanation
     );
     console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
 
@@ -85,6 +97,8 @@ ${mainMappingsText}
 {
   ##筛选条件，整体用一对括号包裹，不带WHERE关键字
   "where": ...,
+  ##查询说明对生成的where解释
+  "explanation": ...,
   ##生成查询不到where条件,需要下一步确认的关键词
   "keywords": [...]
 }`;
@@ -112,7 +126,8 @@ ${mainMappingsText}
     query: string,
     matchedItemsText: string,
     keywords: string[],
-    stage1Where: string
+    stage1Where: string,
+    stage1Explanation?: string
   ): Promise<Stage1Result> {
     const systemPrompt = `你是一个SQL查询生成器。
 
@@ -126,6 +141,9 @@ ${query}
 ## 上一步生成的where条件{{where}}:
 ${stage1Where}
 
+## 上一步生成的解释{{stage1_explanation}}:
+${stage1Explanation || ''}
+
 ## 上一步无法确定条件的关键词{{keyword}}:
 ${keywords.join(', ')}
 
@@ -134,13 +152,14 @@ ${matchedItemsText}
 
 目标: 根据查询结果和用户输入生成新的条件拼接到上一步生成的where条件后面,并且按照下面输出格式生成其他信息
 
-## 输出格式
+## 输出格式(JSON)
 {
-  ##筛选条件，整体用一对括号包裹，如 (field = 100 AND type = 'book')，不带WHERE关键字
-  "where": (...),
+  ##筛选条件，整体用一对括号包裹，如 "(field = 100 AND type = 'book')"，不带WHERE关键字
+  ##如果没有新条件，直接把上一步的where条件包裹在括号里返回
+  "where": "(...)",
   # 用户指定的数量，没指定返回 null
   "limit": ...,
-  ##查询说明对生成的where解释
+  ##查询说明对最后生成的where解释
   "explanation": ...,
   ##匹配到的额外信息的id和values,只根据{{keyword}}和{{extension_info}}生成,并且没有提取条件到where的才需要生成
   "extensions": [

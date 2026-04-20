@@ -124,18 +124,15 @@ export class LSMSDK {
       aiExtensions = [...aiExtensions, ...(result.extensions ?? [])];
       
       // 构建完整SQL（使用 fromClause 避免硬编码表名）
-      // Stage2 返回的 where 可能已带 WHERE 前缀，需判断处理
+      const baseSelect = `SELECT ${this.sqlHelper.fromClause}`;
       if (result.where) {
         const where = result.where.trim();
-        if (where.toUpperCase().startsWith('WHERE ')) {
-          fullSqlStr = `SELECT ${this.sqlHelper.fromClause} ${where}`;
-        } else {
-          fullSqlStr = `SELECT ${this.sqlHelper.fromClause} WHERE ${where}`;
-        }
+        fullSqlStr = where.toUpperCase().startsWith('WHERE ') 
+          ? `${baseSelect} ${where}`
+          : `${baseSelect} WHERE ${where}`;
       } else {
-        fullSqlStr = `SELECT ${this.sqlHelper.fromClause}`;
+        fullSqlStr = baseSelect;
       }
-      if (result.where) fullSqlStr += ` WHERE ${result.where}`;
       if (result.limit) fullSqlStr += ` LIMIT ${result.limit}`;
     } else if (sql) {
       fullSqlStr = sql;

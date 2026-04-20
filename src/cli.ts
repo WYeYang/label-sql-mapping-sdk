@@ -16,7 +16,7 @@ program
   .option('-q, --query <text>', 'Natural language query')
   .option('-s, --sql <sql>', 'Raw SQL query')
   .option('-p, --page <number>', 'Page number', '1')
-  .option('-ps, --page-size <number>', 'Page size', '20')
+  .option('--page-size <number>', 'Page size', '20')
   .option('--json', 'Output raw JSON');
 
 program.parse();
