@@ -3,18 +3,13 @@
 import { Database, DBQueryResult } from '../db';
 import { SqlHelper, extractWhereAndAfter, hasLimit, replaceLimit } from './sql-helper';
 import type { ExtensionMapping } from '../config';
-import type { ExtensionValue } from './types';
 import { QueryResult } from './types';
+import type { ExtensionInfo } from '../ai/extension-merger';
 
 /**
  * 查询模式
  */
 export type QueryMode = 'list' | 'detail';
-
-/**
- * AI 返回的扩展标签信息
- */
-export interface AIExtensions extends ExtensionMapping {}
 
 /**
  * 查询执行器返回结果
@@ -35,7 +30,7 @@ export class QueryExecutor {
   /**
    * 执行查询
    */
-  execute(fullSqlStr: string, page: number, pageSize: number, mode: QueryMode = 'list', aiExtensions?: AIExtensions[]): QueryExecResult {
+  execute(fullSqlStr: string, page: number, pageSize: number, mode: QueryMode = 'list', aiExtensions?: ExtensionInfo[]): QueryExecResult {
     // AI 返回的 LIMIT 如果大于 pageSize，替换成 pageSize
     const normalizedSql = replaceLimit(fullSqlStr, pageSize);
     const whereAndAfter = extractWhereAndAfter(normalizedSql);
@@ -46,22 +41,14 @@ export class QueryExecutor {
     const total = countResult.rows[0]?.total || 0;
 
     let extMappings: ExtensionMapping[] = [];
-    let extensionsResult: Record<string, ExtensionValue> | undefined;
+    let extensionsResult: ExtensionInfo[] | undefined;
 
     if (mode === 'detail') {
       // 详情模式：查询全部扩展标签，嵌入每条数据
       extMappings = this.extensions;
     } else {
-      // 列表模式：根据 AI 返回的扩展标签构建独立字段
-      if (aiExtensions?.length) {
-        extensionsResult = {};
-        for (const ext of aiExtensions) {
-          extensionsResult[ext.name] = {
-            name: ext.name,
-            values: ext.items?.map(i => i.value) ?? []
-          };
-        }
-      }
+      // 列表模式：直接返回 AI 扩展标签
+      extensionsResult = aiExtensions;
     }
 
     // 构建 SQL
@@ -84,7 +71,7 @@ export class QueryExecutor {
       page, 
       pageSize, 
       totalPages: Math.ceil(total / pageSize),
-      extensions: Object.keys(extensionsResult || {}).length ? extensionsResult : undefined
+      extensions: extensionsResult?.length ? extensionsResult : undefined
     };
   }
 }

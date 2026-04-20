@@ -3,7 +3,6 @@
 import * as dotenv from 'dotenv';
 import { Database, DatabaseFactory } from './db';
 import { QueryExecutor, QueryMode } from './db/query-executor';
-import { NLPQuery } from './ai/nlp-query';
 import { ExtensionMerger } from './ai/extension-merger';
 import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
@@ -33,7 +32,6 @@ export interface LSMSDKOptions {
 export class LSMSDK {
   private readonly database;
   private readonly llmManager: LLMManager;
-  private readonly nlpQuery: NLPQuery;
   private readonly queryExecutor: QueryExecutor;
   private readonly extMerger: ExtensionMerger;
 
@@ -54,7 +52,6 @@ export class LSMSDK {
     
     this.database = DatabaseFactory.create(appConfigManager, labelsConfig);
     this.llmManager = new LLMManager(llm);
-    this.nlpQuery = new NLPQuery(this.llmManager, labelsConfig);
     
     const sqlHelper = SqlHelper.create(labelsConfig);
     sqlHelper.setExtensions(extensions);
@@ -84,12 +81,19 @@ export class LSMSDK {
     let explanation: string | undefined;
     let fullSqlStr = sql ?? '';
 
+    // 构建 extensions：外部传入的值 + AI 返回的 extensions
     let aiExtensions = this.extMerger.buildFromValues(options.extensions ?? []);
     if (query) {
-      const result = await this.nlpQuery.execute(query);
+      const result = await this.llmManager.parseQuery(query);
       explanation = result.explanation;
-      fullSqlStr = `SELECT * FROM cards WHERE ${result.where} LIMIT ${result.limit}`;
+      
+      // 合并 extensions
       aiExtensions = [...aiExtensions, ...(result.extensions ?? [])];
+      
+      // 构建完整SQL
+      let fullSqlStr = `SELECT * FROM cards`;
+      if (result.where) fullSqlStr += ` WHERE ${result.where}`;
+      if (result.limit) fullSqlStr += ` LIMIT ${result.limit}`;
     } else if (sql) {
       fullSqlStr = sql;
     } else {

@@ -1,18 +1,21 @@
 // 大模型管理器 - 两阶段查询流程
 
 import { LLM } from './types';
-import { AppConfigManager, ExtensionMapping } from '../config/app-config';
+import { AppConfigManager } from '../config/app-config';
+import { ExtensionInfo } from './extension-merger';
 
+/**
+ * LLM 解析结果
+ */
 export interface ParseResult {
+  /** 预处理 WHERE 条件 */
   where: string;
-  limit: number;
-  explanation: string;
-  extensions: ExtensionMapping[];
-}
-
-export interface Stage1Result {
-  neededExtensions: { id: string }[];
-  explanation: string;
+  limit?: number;
+  explanation?: string;
+  /** 能直接确定的 id-values 绑定 */
+  extensions: ExtensionInfo[];
+  /** 无法匹配、需交给 Stage2 处理的关键词 */
+  keywords: string[];
 }
 
 /**
@@ -26,44 +29,57 @@ export class LLMManager {
   }
 
   async parseQuery(naturalLanguageQuery: string): Promise<ParseResult> {
-    // 获取简版配置
-    const mappingsText = AppConfigManager.get().getMappingsSimplifiedText();
-    console.log('[LLMManager] mappings length:', mappingsText.length);
+    // 获取主配置（带 values 和 description）
+    const mainMappingsText = AppConfigManager.get().getMainMappingsSimplifiedText();
+    console.log('[LLMManager] mainMappings length:', mainMappingsText.length);
     
-    // 第一轮：识别 extensions
-    const stage1Result = await this.stage1(naturalLanguageQuery, mappingsText);
+    // 第一轮：预处理
+    const stage1Result = await this.stage1(naturalLanguageQuery, mainMappingsText);
     console.log('[LLMManager] stage1:', JSON.stringify(stage1Result));
 
-    // 代码获取 extensions 完整配置
-    const extensionDetails = AppConfigManager.get().getExtensionDetails(stage1Result.neededExtensions);
-    console.log('[LLMManager] got extension details:', extensionDetails.length);
+    // 代码用关键词搜索 items
+    const matchedItemsText = AppConfigManager.get().searchByKeywords(stage1Result.keywords);
+    console.log('[LLMManager] matched items:\n', matchedItemsText);
 
     // 第二轮：生成 SQL
-    const stage2Result = await this.stage2(naturalLanguageQuery, extensionDetails);
+    const stage2Result = await this.stage2(
+      naturalLanguageQuery,
+      matchedItemsText,
+      stage1Result.keywords,
+      stage1Result.where,
+      stage1Result.extensions
+    );
     console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
 
     return stage2Result;
   }
 
   /**
-   * 第一阶段：识别需要的 extensions
+   * 第一阶段：预处理 - 区分能直接生成 WHERE 和需要查配置的
    */
   private async stage1(
     query: string, 
-    mappingsText: string
-  ): Promise<Stage1Result> {
-    const systemPrompt = `你是一个标签识别器。
+    mainMappingsText: string
+  ): Promise<ParseResult> {
+    const systemPrompt = `你是一个SQL查询分析器。
 
-## mappings 配置（id, name, values）
-${mappingsText}
+## 主配置（id, name, description, values）
+${mainMappingsText}
 
 ## 任务
-分析用户的自然语言查询，返回需要用到的标签ID列表。
+分析用户的自然语言查询，分三类处理：
+
+1. **where（能直接生成WHERE条件的，如数值比较）**
+2. **extensions（能直接确定id-values绑定的，如属性=光）**
+3. **keywords（无法匹配的词，交给Stage2处理）**
 
 ## 输出格式（JSON）
 {
-  "neededExtensions": [{"id": "标签ID"}, ...],
-  "explanation": "识别说明"
+  "where": "WHERE条件",
+  "extensions": [
+    {"id": "标签ID", "values": ["匹配的values"]}
+  ],
+  "keywords": ["无法匹配的关键词"]
 }`;
 
     const response = await this.llm.chat([
@@ -72,45 +88,70 @@ ${mappingsText}
     ]);
 
     const jsonStr = response;
-    const result = JSON.parse(jsonStr) as Stage1Result;
-    result.neededExtensions = result.neededExtensions || [];
+    const result = JSON.parse(jsonStr) as ParseResult;
+    result.where = result.where || '';
+    result.extensions = result.extensions || [];
+    result.keywords = result.keywords || [];
     return result;
   }
 
   /**
-   * 第二阶段：生成 SQL 意图
-   * 只传用户输入 + extensions 完整配置
+   * 第二阶段：根据keywords匹配items，补充extensions
    */
   private async stage2(
     query: string,
-    extensionDetails: ExtensionMapping[]
+    matchedItemsText: string,
+    keywords: string[],
+    stage1Where: string,
+    stage1Extensions: ExtensionInfo[]
   ): Promise<ParseResult> {
-    const extDetailsText = JSON.stringify(extensionDetails, null, 2);
+    const stage1ExtText = stage1Extensions.length > 0
+      ? stage1Extensions.map(e => `  - id: ${e.id}, values: ${e.values.join(', ')}`).join('\n')
+      : '(无)';
 
     const systemPrompt = `你是一个SQL查询生成器。
 
 ## 用户查询
 ${query}
 
-## extensions 完整配置
-${extDetailsText}
+---
+上方是用户的原始问题。下方是系统预处理的结果，参考使用。
+---
 
-## 输出规范（JSON）
+## Stage1 预处理条件（直接使用）
+${stage1Where || '(无)'}
+
+## Stage1 已确定的 extensions（直接使用）
+${stage1ExtText}
+
+## 关键词（无法直接确定、需匹配的词）
+${keywords.join(', ') || '(无)'}
+
+## 匹配的 items（用keywords匹配到的items，用于补充extensions）
+${matchedItemsText || '(无)'}
+
+---
+根据用户意图，参考上方Stage1结果，补充keywords匹配的items，直接输出完整结果。
+---
+
+## 输出格式（JSON）
 {
-  "where": "(AI自行推导的条件组合)",
-  "limit": 查询的数据条数(AI自行推导),
-  "explanation": "AI对返回结果的说明",
-  "extensions": [{"id": "标签ID", "values": ["值"]}]  // AI参考extensions配置，选择直接添加到where或输出标签由代码拼接
+  "where": "WHERE条件（Stage1条件+extensions拼接）",
+  "limit": 根据用户意图推导,
+  "explanation": "查询说明",
+  "extensions": [
+    {"id": "标签ID", "values": ["匹配的values"]}
+  ]
 }`;
 
     const response = await this.llm.chat([
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `根据上述配置生成 SQL` }
+      { role: 'user', content: `根据上述配置输出 id 和 values 绑定` }
     ]);
 
     const jsonStr = response;
     const result = JSON.parse(jsonStr) as ParseResult;
-    result.extensions = result.extensions || [];
+
     return result;
   }
 }

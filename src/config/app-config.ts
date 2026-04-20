@@ -271,37 +271,105 @@ export class AppConfigManager {
   }
 
   /**
-   * 获取简化的 mappings 文本格式（使用 allMappings）
+   * 获取主配置的简化文本（带 values 和 description）
    */
-  getMappingsSimplifiedText(): string {
-    if (this.extensionsSimplifiedText) {
-      return this.extensionsSimplifiedText;
-    }
-
-    const simplified = this.allMappings.map(mapping => {
+  getMainMappingsSimplifiedText(): string {
+    const mainMappings = this.labelsConfig?.mappings || [];
+    return mainMappings.map(mapping => {
       const lines: string[] = [
         `- id: ${mapping.id}`,
         `  name: ${mapping.name}`
       ];
       
-      // 如果有 items，只列出 values
+      if (mapping.description) {
+        lines.push(`  description: ${mapping.description}`);
+      }
+      
       if (mapping.items && mapping.items.length > 0) {
         const values = mapping.items.map(item => item.value);
         lines.push(`  values: [${values.join(', ')}]`);
       }
       
       return lines.join('\n');
-    });
-
-    this.extensionsSimplifiedText = simplified.join('\n\n');
-    return this.extensionsSimplifiedText;
+    }).join('\n\n');
   }
 
   /**
-   * 获取 extensions 完整配置
+   * 用 keywords 搜索所有 items，返回匹配的 mapping（只返回有 items 的 mapping）
    */
-  getExtensionDetails(neededExtensions: { id: string }[]): ExtensionMapping[] {
-    const ids = neededExtensions.map(e => e.id);
-    return this.allMappings.filter(m => ids.includes(m.id));
+  searchByKeywords(keywords: string[]): string {
+    if (!keywords.length) return '';
+    
+    // 按 mapping 分组
+    const matched: Map<string, any[]> = new Map();
+    
+    for (const mapping of this.allMappings) {
+      // 跳过没有 items 的 mapping（desc、name 等让 LLM 自己生成 WHERE）
+      if (!mapping.items || mapping.items.length === 0) {
+        continue;
+      }
+      
+      const matchedItems: any[] = [];
+      
+      for (const item of mapping.items) {
+        const kwLower = keywords.map(k => k.toLowerCase());
+        const matchedKeyword = kwLower.find(kw => 
+          item.value.toLowerCase().includes(kw) ||
+          item.description?.toLowerCase().includes(kw)
+        );
+        if (matchedKeyword) {
+          matchedItems.push({
+            value: item.value,
+            condition: item.condition,
+            description: item.description
+          });
+        }
+      }
+      
+      if (matchedItems.length > 0) {
+        matched.set(mapping.id, matchedItems);
+      }
+    }
+    
+    // 格式化为文本
+    const lines: string[] = [];
+    for (const [id, items] of matched) {
+      lines.push(`${id}:`);
+      for (const item of items) {
+        lines.push(`  - value: ${item.value}`);
+        lines.push(`    condition: ${item.condition}`);
+        if (item.description && item.description !== '无') {
+          lines.push(`    description: ${item.description}`);
+        }
+      }
+    }
+    
+    return lines.join('\n');
+  }
+
+  /**
+   * 根据 extensions 查找 condition
+   */
+  findConditions(extensions: { id: string; values: string[] }[]): any[] {
+    const result: any[] = [];
+    
+    for (const ext of extensions) {
+      const mapping = this.allMappings.find(m => m.id === ext.id);
+      if (!mapping) continue;
+      
+      const matchedItems = mapping.items?.filter(item => ext.values.includes(item.value));
+      if (matchedItems && matchedItems.length > 0) {
+        result.push({
+          id: mapping.id,
+          name: mapping.name,
+          items: matchedItems.map(item => ({
+            value: item.value,
+            condition: item.condition
+          }))
+        });
+      }
+    }
+    
+    return result;
   }
 }
