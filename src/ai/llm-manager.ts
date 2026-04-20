@@ -75,18 +75,18 @@ export class LLMManager {
   ): Promise<Stage1Result> {
     const systemPrompt = `你是一个SQL查询分析器。
 
-## 数据库字段和查询方法说明
+## 数据库字段和查询方法说明:
+${mainMappingsText}
 
 ## 任务
 分析用户的自然语言查询：
 
-1. **优先生成 where（筛选条件，整体用一对括号包裹，如 (field = 100 AND type = 'book')，不带WHERE关键字）**
-2. **keywords（分析不出来的词放这里）**
-
 ## 输出格式（JSON）
 {
-  "where": "筛选条件，整体用一对括号包裹，如 (field = 100 AND type = 'book')，不带WHERE关键字",
-  "keywords": ["无法匹配的关键词"]
+  ##筛选条件，整体用一对括号包裹，不带WHERE关键字
+  "where": ...,
+  ##生成查询不到where条件,需要下一步确认的关键词
+  "keywords": [...]
 }`;
 
     console.log('\n========== Stage1 输入 ==========');
@@ -123,13 +123,13 @@ ${query}
 上方是用户的原始问题。下方是系统预处理的结果，参考使用。
 ---
 
-## 上一步生成的where条件:
+## 上一步生成的where条件{{where}}:
 ${stage1Where}
 
-## 上一步无法确定条件的关键词:
+## 上一步无法确定条件的关键词{{keyword}}:
 ${keywords.join(', ')}
 
-## 根据关键词查询的额外信息:
+## 根据关键词查询的额外信息{{extension_info}}:
 ${matchedItemsText}
 
 目标: 根据查询结果和用户输入生成新的条件拼接到上一步生成的where条件后面,并且按照下面输出格式生成其他信息
@@ -142,7 +142,7 @@ ${matchedItemsText}
   "limit": ...,
   ##查询说明对生成的where解释
   "explanation": ...,
-  ##匹配到的额外信息的id和values
+  ##匹配到的额外信息的id和values,只根据{{keyword}}和{{extension_info}}生成,并且没有提取条件到where的才需要生成
   "extensions": [
     {"id": "标签ID", "values": ["匹配的values"]}
   ]
