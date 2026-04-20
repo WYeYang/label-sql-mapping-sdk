@@ -118,10 +118,6 @@ ${mainMappingsText}
     stage1Where: string,
     stage1Extensions: { id: string; values: string[] }[]
   ): Promise<Stage1Result> {
-    const stage1ExtText = stage1Extensions.length > 0
-      ? stage1Extensions.map(e => `  - id: ${e.id}, values: ${e.values.join(', ')}`).join('\n')
-      : '(无)';
-
     const systemPrompt = `你是一个SQL查询生成器。
 
 ## 用户查询
@@ -135,7 +131,7 @@ ${query}
 ${stage1Where || '(无)'}
 
 ## Stage1 已确定的 extensions（直接使用）
-${stage1ExtText}
+${JSON.stringify(stage1Extensions)}
 
 ## 关键词（无法直接确定、需匹配的词）
 ${keywords.join(', ') || '(无)'}
