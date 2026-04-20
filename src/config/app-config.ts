@@ -49,23 +49,20 @@ function findLsmPackage(startDir: string, packageName?: string): string | null {
 }
 
 /**
- * 统一标签映射
+ * 扩展标签映射
  */
-export interface UnifiedLabel {
-  id: string;
-  name: string;
-  description?: string;
-  items: MappingItem[];
+export interface ExtensionMapping {
+  id: string;           // 标签唯一ID
+  name: string;          // 标签展示名称
+  description?: string; // 标签描述
+  items: MappingItem[];  // 映射项数组
 }
-
-/**
- * 兼容旧接口
- */
-export type ExtensionMapping = UnifiedLabel;
 
 export class AppConfigManager {
   private labelsConfig: LSMConfig | null = null;
-  private allMappings: UnifiedLabel[] = [];
+  private extensions: Map<string, ExtensionMapping> = new Map();
+  private allMappings: ExtensionMapping[] = [];  // 合并后的列表
+  private extensionsSimplifiedText: string | null = null;
 
   private constructor(
     public readonly labelsPath: string,
@@ -146,13 +143,9 @@ export class AppConfigManager {
       const content = fs.readFileSync(this.labelsPath, 'utf8');
       const parsed = yaml.parse(content);
       this.labelsConfig = processConfigDefaults(parsed);
-      if (this.labelsConfig) {
-        this.labelsConfig.rawContent = content;
-      }
     }
 
-    // 2. 加载扩展标签配置（从 labels.yaml 同级 extensions 目录）
-    const extensions: UnifiedLabel[] = [];
+    // 2. 读取 extensions 目录下的所有扩展配置
     const extDir = path.join(path.dirname(this.labelsPath), 'extensions');
     if (fs.existsSync(extDir)) {
       const files = fs.readdirSync(extDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
@@ -162,7 +155,7 @@ export class AppConfigManager {
           const content = fs.readFileSync(filePath, 'utf-8');
           const parsed = yaml.parse(content);
           if (parsed && parsed.id && parsed.items && Array.isArray(parsed.items)) {
-            extensions.push(parsed as UnifiedLabel);
+            this.extensions.set(parsed.id, parsed);
           }
         } catch (err) {
           console.error(`[AppConfigManager] Failed to load extension ${file}:`, err);
@@ -170,11 +163,10 @@ export class AppConfigManager {
       }
     }
 
-    // 3. 合并 labels + extensions
-    this.allMappings = [
-      ...(this.labelsConfig?.mappings?.filter(m => m.items) || []),
-      ...extensions
-    ] as UnifiedLabel[];
+    // 3. 合并 labelsConfig.mappings 和 extensions 到 allMappings
+    const labelMappings = this.labelsConfig?.mappings || [];
+    const extensionMappings = Array.from(this.extensions.values());
+    this.allMappings = [...labelMappings, ...extensionMappings] as any[];
   }
 
   getDatabasePath(): string {
@@ -248,35 +240,136 @@ export class AppConfigManager {
    * 获取所有扩展标签
    */
   getExtensions(): ExtensionMapping[] {
-    return this.allMappings;
+    return Array.from(this.extensions.values());
   }
 
   /**
    * 根据 ID 获取扩展标签
    */
   getExtensionById(id: string): ExtensionMapping | undefined {
-    return this.allMappings.find(m => m.id === id);
+    return this.extensions.get(id);
   }
 
   /**
-   * 获取标签配置列表（仅用于 AI 查询）
+   * 获取扩展标签详情（用于工具调用）
+   * 返回description让LLM自行理解推导SQL
    */
-  getMappingConfigs(ids: string[]): UnifiedLabel[] {
-    const map = new Map(this.allMappings.map(m => [m.id, m]));
-    return ids.map(id => map.get(id)).filter((m): m is UnifiedLabel => !!m);
+  getExtensionDetail(extensionId: string, value: string): string | null {
+    const ext = this.extensions.get(extensionId);
+    if (!ext) return null;
+
+    const item = ext.items.find(i => i.value === value);
+    if (!item) return null;
+
+    // 返回描述信息，让LLM根据描述自行理解并推导SQL
+    return JSON.stringify({
+      extensionId: ext.id,
+      extensionName: ext.name,
+      value: item.value,
+      description: item.description || '无description',
+    });
   }
 
   /**
-   * 根据 ID 获取标签（仅用于 AI 查询）
+   * 获取主配置的简化文本（带 values 和 description）
    */
-  getMapping(id: string): UnifiedLabel | undefined {
-    return this.allMappings.find(m => m.id === id);
+  getMainMappingsSimplifiedText(): string {
+    const mainMappings = this.labelsConfig?.mappings || [];
+    return mainMappings.map(mapping => {
+      const lines: string[] = [
+        `- id: ${mapping.id}`,
+        `  name: ${mapping.name}`
+      ];
+      
+      if (mapping.description) {
+        lines.push(`  description: ${mapping.description}`);
+      }
+      
+      if (mapping.items && mapping.items.length > 0) {
+        const values = mapping.items.map(item => item.value);
+        lines.push(`  values: [${values.join(', ')}]`);
+      }
+      
+      return lines.join('\n');
+    }).join('\n\n');
   }
 
   /**
-   * 获取所有标签（仅用于 AI 查询）
+   * 用 keywords 搜索所有 items，返回匹配的 mapping（只返回有 items 的 mapping）
    */
-  getAllMappings(): UnifiedLabel[] {
-    return this.allMappings;
+  searchByKeywords(keywords: string[]): string {
+    if (!keywords.length) return '';
+    
+    // 按 mapping 分组
+    const matched: Map<string, any[]> = new Map();
+    
+    for (const mapping of this.allMappings) {
+      // 跳过没有 items 的 mapping（desc、name 等让 LLM 自己生成 WHERE）
+      if (!mapping.items || mapping.items.length === 0) {
+        continue;
+      }
+      
+      const matchedItems: any[] = [];
+      
+      for (const item of mapping.items) {
+        const kwLower = keywords.map(k => k.toLowerCase());
+        const matchedKeyword = kwLower.find(kw => 
+          item.value.toLowerCase().includes(kw) ||
+          item.description?.toLowerCase().includes(kw)
+        );
+        if (matchedKeyword) {
+          matchedItems.push({
+            value: item.value,
+            condition: item.condition,
+            description: item.description
+          });
+        }
+      }
+      
+      if (matchedItems.length > 0) {
+        matched.set(mapping.id, matchedItems);
+      }
+    }
+    
+    // 格式化为文本
+    const lines: string[] = [];
+    for (const [id, items] of matched) {
+      lines.push(`${id}:`);
+      for (const item of items) {
+        lines.push(`  - value: ${item.value}`);
+        lines.push(`    condition: ${item.condition}`);
+        if (item.description && item.description !== '无') {
+          lines.push(`    description: ${item.description}`);
+        }
+      }
+    }
+    
+    return lines.join('\n');
+  }
+
+  /**
+   * 根据 extensions 查找 condition
+   */
+  findConditions(extensions: { id: string; values: string[] }[]): any[] {
+    const result: any[] = [];
+    
+    for (const ext of extensions) {
+      const mapping = this.allMappings.find(m => m.id === ext.id);
+      if (!mapping) continue;
+      
+      const matchedItems = mapping.items?.filter(item => ext.values.includes(item.value));
+      if (matchedItems && matchedItems.length > 0) {
+        result.push({
+          id: mapping.id,
+          name: mapping.name,
+          items: matchedItems.map(item => ({
+            value: item.value,
+            condition: item.condition
+          }))
+        });
+      }
+    }
+    
+    return result;
   }
 }

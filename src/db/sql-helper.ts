@@ -2,7 +2,6 @@
 
 import { LSMConfig } from '../config';
 import type { ExtensionMapping, MappingItem } from '../config';
-import type { ExtensionInfo } from '../ai/llm-manager';
 
 /**
  * 从完整SQL中提取WHERE及后面的所有内容（含ORDER BY/LIMIT/OFFSET）
@@ -50,15 +49,6 @@ export function appendWhereCondition(sql: string, condition: string): string {
     // 没有 WHERE，直接添加
     return `${normalizedSql} WHERE ${condition}`;
   }
-}
-
-/**
- * 将多个WHERE条件合并为一个
- */
-export function mergeWhereConditions(conditions: string[]): string {
-  if (conditions.length === 0) return '1=1';
-  if (conditions.length === 1) return conditions[0];
-  return conditions.map(c => `(${c})`).join(' AND ');
 }
 
 /** SQL转义：字段引用原样输出，字符串值加引号 */
@@ -190,28 +180,6 @@ export class SqlHelper {
     return cases.join(', ');
   }
 
-  /**
-   * 根据 AI 返回的扩展标签信息构建 CASE WHEN
-   * @param extInfos AI 返回的扩展标签信息 [{id, values}]
-   */
-  buildCaseWhenByExtInfo(extInfos: ExtensionInfo[]): string {
-    if (!extInfos?.length) return '';
-    const cases = extInfos.map(info => {
-      const mapping = this.getExtensionById(info.id);
-      if (!mapping) return '';
-      // 根据 values 过滤匹配的 items（直接匹配 value 字段）
-      const matched = mapping.items.filter(item => info.values.includes(item.value));
-      if (!matched.length) return '';
-      const whens = matched.map(item => {
-        const cond = item.condition || '1=1';
-        const val = item.value;
-        return `WHEN ${cond} THEN '${val}'`;
-      }).join(' ');
-      return `CASE ${whens} END AS ${info.id}`;
-    }).filter(Boolean);
-    return cases.join(', ');
-  }
-
   buildCountSql(whereAndAfter: string): string {
     return `SELECT COUNT(*) as total FROM ${this.fromClause} ${whereAndAfter}`.trim();
   }
@@ -226,15 +194,6 @@ export class SqlHelper {
    */
   buildQuerySql(whereAndAfter: string, extensions: ExtensionMapping[], pageSize: number, offset: number): string {
     const extSelect = this.buildExtensionSelect(extensions);
-    const base = `SELECT ${this.labelSelectClause}${extSelect ? ', ' + extSelect : ''} FROM ${this.fromClause} ${whereAndAfter}`;
-    return `${base} LIMIT ${pageSize} OFFSET ${offset}`.trim();
-  }
-
-  /**
-   * 构建完整查询 SQL（主标签 + 扩展标签，使用 AI 返回的扩展标签信息）
-   */
-  buildQuerySqlByExtInfo(whereAndAfter: string, extInfos: ExtensionInfo[], pageSize: number, offset: number): string {
-    const extSelect = this.buildCaseWhenByExtInfo(extInfos);
     const base = `SELECT ${this.labelSelectClause}${extSelect ? ', ' + extSelect : ''} FROM ${this.fromClause} ${whereAndAfter}`;
     return `${base} LIMIT ${pageSize} OFFSET ${offset}`.trim();
   }

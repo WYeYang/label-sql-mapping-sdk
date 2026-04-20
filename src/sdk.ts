@@ -3,14 +3,13 @@
 import * as dotenv from 'dotenv';
 import { Database, DatabaseFactory } from './db';
 import { QueryExecutor, QueryMode } from './db/query-executor';
-import { NLPQuery } from './ai/nlp-query';
-import { ExtensionMerger } from './ai/extension-merger';
 import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
 import { LLM } from './ai/types';
 import { AppConfigManager } from './config/app-config';
 import { SqlHelper, appendWhereCondition } from './db/sql-helper';
 import { QueryResult } from './db/types';
+import { buildWhereConditions } from './ai/extension-merger';
 
 dotenv.config();
 
@@ -33,9 +32,7 @@ export interface LSMSDKOptions {
 export class LSMSDK {
   private readonly database;
   private readonly llmManager: LLMManager;
-  private readonly nlpQuery: NLPQuery;
   private readonly queryExecutor: QueryExecutor;
-  private readonly extMerger: ExtensionMerger;
 
   constructor(options?: LSMSDKOptions) {
     const appConfigManager = AppConfigManager.new(options?.configPath, options?.sdkConfigPath);
@@ -54,12 +51,10 @@ export class LSMSDK {
     
     this.database = DatabaseFactory.create(appConfigManager, labelsConfig);
     this.llmManager = new LLMManager(llm);
-    this.nlpQuery = new NLPQuery(this.llmManager, labelsConfig);
     
     const sqlHelper = SqlHelper.create(labelsConfig);
     sqlHelper.setExtensions(extensions);
     this.queryExecutor = new QueryExecutor(this.database, sqlHelper, extensions);
-    this.extMerger = new ExtensionMerger(extensions);
   }
 
   /**
@@ -84,31 +79,33 @@ export class LSMSDK {
     let explanation: string | undefined;
     let fullSqlStr = sql ?? '';
 
-    // 构建 extensions：外部传入的值 + AI 返回的 extensions
-    let aiExtensions = this.extMerger.buildFromValues(options.extensions ?? []);
     if (query) {
-      // 使用自然语言查询
-      const result = await this.nlpQuery.execute(query);
+      const result = await this.llmManager.parseQuery(query);
       explanation = result.explanation;
-      // 构建完整SQL（包含where条件和extensions处理）
-      fullSqlStr = this.nlpQuery.buildSQL(result, page);
-      aiExtensions = this.extMerger.merge(aiExtensions, result.extensions ?? []);
+      
+      // 使用 LLM 生成的 WHERE 条件
+      const llmWhere = result.where || '1=1';
+      fullSqlStr = `SELECT * FROM cards WHERE ${llmWhere} LIMIT ${result.limit}`;
+      
+      // 解析 extensions 获取 condition
+      const aiExtensions = AppConfigManager.get().findConditions(result.extensions || []);
+      
+      // 根据 extensions 构建 WHERE 条件并拼接到 SQL
+      const whereCondition = buildWhereConditions(aiExtensions);
+      if (whereCondition) {
+        fullSqlStr = appendWhereCondition(fullSqlStr, whereCondition);
+      }
     } else if (sql) {
       fullSqlStr = sql;
     } else {
       throw new Error('请提供 query 或 sql 参数');
     }
 
-    // 根据 extensions 构建 WHERE 条件并拼接到 SQL
-    const whereCondition = this.extMerger.buildWhereConditions(aiExtensions);
-    if (whereCondition) {
-      fullSqlStr = appendWhereCondition(fullSqlStr, whereCondition);
-    }
-
     if (!fullSqlStr.trim()) {
       throw new Error('SQL不能为空');
     }
 
+    const aiExtensions = AppConfigManager.get().findConditions([]);
     const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize, mode, aiExtensions);
     
     return {
