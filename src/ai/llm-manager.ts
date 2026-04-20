@@ -2,52 +2,33 @@
 
 import { LLM } from './types';
 import { AppConfigManager } from '../config/app-config';
-import { ExtensionInfo } from './extension-merger';
 
-/**
- * LLM 解析结果
- */
 export interface ParseResult {
-  /** 预处理 WHERE 条件 */
   where: string;
+  limit: number;
+  explanation: string;
+  extensions: any[];
+}
+
+export interface Stage1Result {
+  /** 能直接生成的预处理 WHERE 条件 */
+  where: string;
+  /** limit */
   limit?: number;
+  /** explanation */
   explanation?: string;
   /** 能直接确定的 id-values 绑定 */
-  extensions: ExtensionInfo[];
-  /** 无法匹配、需交给 Stage2 处理的关键词 */
+  extensions: {
+    id: string;
+    values: string[];
+  }[];
+  /** 无法匹配、需交给Stage2处理的关键词 */
   keywords: string[];
 }
 
 /**
  * LLM Manager - 两阶段查询
  */
-/**
- * LLM 管理器 - 两阶段查询
- * 
- * ┌─────────────────────────────────────────────────────────────────────┐
- * │                        parseQuery() 入口                           │
- * ├─────────────────────────────────────────────────────────────────────┤
- * │                                                                      │
- * │  Stage1: 预处理                                                     │
- * │  ├─ 输入: 用户查询 + 主配置(id/name/description/values)               │
- * │  ├─ LLM 区分三类:                                                    │
- * │  │   ├─ where: 能直接生成 WHERE 的（如 atk >= 1800）                  │
- * │  │   ├─ extensions: 能直接确定 id-values 的（如 属性=光）             │
- * │  │   └─ keywords: 无法匹配的词（需交给 Stage2）                        │
- * │  └─ 输出: { where, extensions, keywords }                            │
- * │                                                                      │
- * │  代码: 用 keywords 搜索匹配的 items                                   │
- * │  ├─ 输入: keywords[]                                                  │
- * │  └─ 输出: 匹配的 items 文本（id/name/values/description）             │
- * │                                                                      │
- * │  Stage2: 补充 extensions                                            │
- * │  ├─ 输入: Stage1 结果 + 匹配的 items                                 │
- * │  ├─ LLM 根据 keywords 和 items 补充 extensions                        │
- * │  └─ 输出: 最终 { where, extensions, limit, explanation }              │
- * │                                                                      │
- * └─────────────────────────────────────────────────────────────────────┘
- */
-
 export class LLMManager {
   private llm: LLM;
 
@@ -78,7 +59,12 @@ export class LLMManager {
     );
     console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
 
-    return stage2Result;
+    return {
+      where: stage2Result.where || '',
+      limit: stage2Result.limit || 10,
+      explanation: stage2Result.explanation || '',
+      extensions: stage2Result.extensions || []
+    };
   }
 
   /**
@@ -87,7 +73,7 @@ export class LLMManager {
   private async stage1(
     query: string, 
     mainMappingsText: string
-  ): Promise<ParseResult> {
+  ): Promise<Stage1Result> {
     const systemPrompt = `你是一个SQL查询分析器。
 
 ## 主配置（id, name, description, values）
@@ -115,7 +101,7 @@ ${mainMappingsText}
     ]);
 
     const jsonStr = response;
-    const result = JSON.parse(jsonStr) as ParseResult;
+    const result = JSON.parse(jsonStr) as Stage1Result;
     result.where = result.where || '';
     result.extensions = result.extensions || [];
     result.keywords = result.keywords || [];
@@ -130,8 +116,8 @@ ${mainMappingsText}
     matchedItemsText: string,
     keywords: string[],
     stage1Where: string,
-    stage1Extensions: ExtensionInfo[]
-  ): Promise<ParseResult> {
+    stage1Extensions: { id: string; values: string[] }[]
+  ): Promise<Stage1Result> {
     const stage1ExtText = stage1Extensions.length > 0
       ? stage1Extensions.map(e => `  - id: ${e.id}, values: ${e.values.join(', ')}`).join('\n')
       : '(无)';
@@ -163,8 +149,8 @@ ${matchedItemsText || '(无)'}
 
 ## 输出格式（JSON）
 {
-  "where": "WHERE条件（Stage1条件+extensions拼接）",
-  "limit": 根据用户意图推导,
+  "where": "WHERE条件",
+  "limit": 用户指定的数量，没指定返回 null,
   "explanation": "查询说明",
   "extensions": [
     {"id": "标签ID", "values": ["匹配的values"]}
@@ -177,7 +163,7 @@ ${matchedItemsText || '(无)'}
     ]);
 
     const jsonStr = response;
-    const result = JSON.parse(jsonStr) as ParseResult;
+    const result = JSON.parse(jsonStr) as Stage1Result;
 
     return result;
   }
