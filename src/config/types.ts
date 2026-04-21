@@ -51,6 +51,10 @@ export interface LabelMapping {
   condition?: string;  // 前置条件（可选）
   value?: string;      // 单一值（单值模式）或默认值（items 模式匹配不到时）
   items?: MappingItem[]; // 映射项数组（多条件模式）
+  range?: {            // 数值范围约束（可选，有此字段表示是数值类型）
+    min?: number;
+    max?: number;
+  };
 }
 
 /**

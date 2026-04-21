@@ -55,7 +55,13 @@ export interface ExtensionMapping {
   id: string;           // 标签唯一ID
   name: string;          // 标签展示名称
   description?: string; // 标签描述
-  items: MappingItem[];  // 映射项数组
+  items?: MappingItem[]; // 映射项数组（可选）
+  condition?: string;   // 前置条件（可选）
+  value?: string;       // 字段值（可选）
+  range?: {            // 数值范围（可选）
+    min?: number;
+    max?: number;
+  };
 }
 
 /**

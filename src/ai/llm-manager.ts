@@ -8,6 +8,7 @@ export interface ParseResult {
   limit: number;
   explanation: string;
   extensions: any[];
+  extra?: any;
 }
 
 export interface Stage1Result {
@@ -24,6 +25,8 @@ export interface Stage1Result {
   }[];
   /** 无法匹配、需交给Stage2处理的关键词 */
   keywords: string[];
+  /** 额外输出字段（根据用户systemPrompt要求） */
+  extra?: any;
 }
 
 /**
@@ -36,13 +39,13 @@ export class LLMManager {
     this.llm = llm;
   }
 
-  async parseQuery(naturalLanguageQuery: string): Promise<ParseResult> {
+  async parseQuery(naturalLanguageQuery: string, extraSystemPrompt?: string): Promise<ParseResult> {
     // 获取主配置（带 values 和 description）
     const mainMappingsText = AppConfigManager.get().getMainMappingsSimplifiedText();
     console.log('[LLMManager] mainMappings length:', mainMappingsText.length);
     
     // 第一轮：预处理
-    const stage1Result = await this.stage1(naturalLanguageQuery, mainMappingsText);
+    const stage1Result = await this.stage1(naturalLanguageQuery, mainMappingsText, extraSystemPrompt);
     console.log('[LLMManager] stage1:', JSON.stringify(stage1Result));
 
     // 如果没有关键词，直接返回 Stage1 结果，跳过 Stage2
@@ -52,7 +55,8 @@ export class LLMManager {
         where: stage1Result.where || '',
         limit: stage1Result.limit || 10,
         explanation: stage1Result.explanation || '',
-        extensions: []
+        extensions: [],
+        extra: stage1Result.extra
       };
     }
 
@@ -66,7 +70,8 @@ export class LLMManager {
       matchedItemsText,
       stage1Result.keywords,
       stage1Result.where,
-      stage1Result.explanation
+      stage1Result.explanation,
+      extraSystemPrompt
     );
     console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
 
@@ -74,7 +79,8 @@ export class LLMManager {
       where: stage2Result.where || '',
       limit: stage2Result.limit || 10,
       explanation: stage2Result.explanation || '',
-      extensions: stage2Result.extensions || []
+      extensions: stage2Result.extensions || [],
+      extra: stage2Result.extra
     };
   }
 
@@ -83,15 +89,20 @@ export class LLMManager {
    */
   private async stage1(
     query: string, 
-    mainMappingsText: string
+    mainMappingsText: string,
+    extraSystemPrompt?: string
   ): Promise<Stage1Result> {
-    const systemPrompt = `你是一个SQL查询分析器。
+    let systemPrompt = `你是一个SQL查询分析器。
 
 ## 数据库字段和查询方法说明:
 ${mainMappingsText}
 
+## 额外说明:
+${extraSystemPrompt}
+
+
 ## 任务
-分析用户的自然语言查询：
+分析用户的自然语言查询
 
 ## 输出格式（JSON）
 {
@@ -100,7 +111,9 @@ ${mainMappingsText}
   ##查询说明对生成的where解释
   "explanation": ...,
   ##生成查询不到where条件,需要下一步确认的关键词
-  "keywords": [...]
+  "keywords": [...],
+  ##额外输出字段（根据额外说明生成）
+  "extra": ...
 }`;
 
     console.log('\n========== Stage1 输入 ==========');
@@ -127,9 +140,10 @@ ${mainMappingsText}
     matchedItemsText: string,
     keywords: string[],
     stage1Where: string,
-    stage1Explanation?: string
+    stage1Explanation?: string,
+    extraSystemPrompt?: string
   ): Promise<Stage1Result> {
-    const systemPrompt = `你是一个SQL查询生成器。
+    let systemPrompt = `你是一个SQL查询生成器。
 
 ## 用户查询
 ${query}
@@ -150,6 +164,10 @@ ${keywords.join(', ')}
 ## 根据关键词查询的额外信息{{extension_info}}:
 ${matchedItemsText}
 
+
+## 额外说明:
+${extraSystemPrompt}
+
 目标: 根据查询结果和用户输入生成新的条件拼接到上一步生成的where条件后面,并且按照下面输出格式生成其他信息
 
 ## 输出格式(JSON)
@@ -165,6 +183,8 @@ ${matchedItemsText}
   "extensions": [
     {"id": "标签ID", "values": ["匹配的values"]}
   ]
+  ##额外输出字段（根据额外说明生成）
+  "extra": ...
 }`;
 
     console.log('\n========== Stage2 输入 ==========');

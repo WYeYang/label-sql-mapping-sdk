@@ -149,7 +149,7 @@ export class SqlHelper {
     return this._extensions.filter(ext => 
       lower.includes(ext.id.toLowerCase()) ||
       lower.includes(ext.name.toLowerCase()) ||
-      ext.items.some((item: MappingItem) => lower.some(k => item.value.toLowerCase().includes(k)))
+      (ext.items && ext.items.some((item: MappingItem) => lower.some(k => item.value.toLowerCase().includes(k))))
     );
   }
 
@@ -170,6 +170,7 @@ export class SqlHelper {
   buildExtensionSelect(extensions: ExtensionMapping[]): string {
     if (!extensions.length) return '';
     const cases = extensions.map(ext => {
+      if (!ext.items?.length) return '';
       const whens = ext.items.map((item: MappingItem) => {
         const cond = item.condition || '1=1';
         const val = item.value;

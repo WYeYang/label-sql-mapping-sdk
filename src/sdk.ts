@@ -3,19 +3,27 @@
 import * as dotenv from 'dotenv';
 import { Database, DatabaseFactory } from './db';
 import { QueryExecutor, QueryMode } from './db/query-executor';
-import { ExtensionMerger } from './ai/extension-merger';
+import { ExtensionMerger, ExtensionInfo } from './ai/extension-merger';
 import { LLMManager } from './ai/llm-manager';
 import { OpenAILLM } from './ai/openai-llm';
 import { LLM } from './ai/types';
 import { AppConfigManager } from './config/app-config';
 import { SqlHelper, appendWhereCondition } from './db/sql-helper';
-import { QueryResult } from './db/types';
+import { QueryResult as BaseQueryResult } from './db/types';
 
 dotenv.config();
 
-export { QueryResult } from './db/types';
 export { QueryMode } from './db/query-executor';
 export { LLM } from './ai/types';
+export { ExtensionInfo } from './ai/extension-merger';
+
+/**
+ * SDK 查询结果
+ */
+export interface QueryResult extends BaseQueryResult {
+  /** 额外输出字段（根据用户systemPrompt要求） */
+  extra?: any;
+}
 
 /**
  * SDK 配置选项
@@ -99,7 +107,8 @@ export class LSMSDK {
    * @param options.page 页码，默认1
    * @param options.pageSize 每页数量，默认20
    * @param options.mode 查询模式：list(列表) 或 detail(详情)
-   * @param options.extensions 扩展标签值列表（会根据配置找到对应ID后合并）
+   * @param options.extensions 扩展标签（id+values格式）
+   * @param options.systemPrompt 额外的系统提示词
    */
   async query(options: {
     query?: string;
@@ -107,18 +116,21 @@ export class LSMSDK {
     page?: number;
     pageSize?: number;
     mode?: QueryMode;
-    extensions?: string[];
+    extensions?: ExtensionInfo[];
+    systemPrompt?: string;
   }): Promise<QueryResult> {
-    const { query, sql, page = 1, pageSize = 20, mode = 'list' } = options;
+    const { query, sql, page = 1, pageSize = 20, mode = 'list', systemPrompt } = options;
 
     let explanation: string | undefined;
+    let extra: any;
     let fullSqlStr = sql ?? '';
 
-    // 构建 extensions：外部传入的值 + AI 返回的 extensions
-    let aiExtensions = this.extMerger.buildFromValues(options.extensions ?? []);
+    // 构建 extensions：外部传入的 extensions
+    let aiExtensions: ExtensionInfo[] = options.extensions ?? [];
     if (query) {
-      const result = await this.llmManager.parseQuery(query);
+      const result = await this.llmManager.parseQuery(query, systemPrompt);
       explanation = result.explanation;
+      extra = result.extra;
       
       // 合并 extensions
       aiExtensions = [...aiExtensions, ...(result.extensions ?? [])];
@@ -137,7 +149,12 @@ export class LSMSDK {
     } else if (sql) {
       fullSqlStr = sql;
     } else {
-      throw new Error('请提供 query 或 sql 参数');
+      // 如果没有 query 和 sql，但有 extensions，也可以查询
+      if (aiExtensions.length === 0) {
+        throw new Error('请提供 query 或 sql 或 extensions 参数');
+      }
+      // 基础 SQL
+      fullSqlStr = `SELECT ${this.sqlHelper.fromClause}`;
     }
 
     // 根据 extensions 构建 WHERE 条件并拼接到 SQL
@@ -155,7 +172,8 @@ export class LSMSDK {
     return {
       ...execResult,
       sql: fullSqlStr,
-      explanation
+      explanation,
+      extra
     };
   }
 }
