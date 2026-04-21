@@ -16,6 +16,9 @@ dotenv.config();
 export { QueryMode } from './db/query-executor';
 export { LLM } from './ai/types';
 export { ExtensionInfo } from './ai/extension-merger';
+export { LSMConfig, DatabaseConfig, LabelMapping, MappingItem } from './config/types';
+export { ExtensionMapping } from './config/app-config';
+export { LLMConfig } from './ai/types';
 
 /**
  * SDK 查询结果
@@ -75,11 +78,12 @@ export class LSMSDK {
   private readonly queryExecutor: QueryExecutor;
   private readonly extMerger: ExtensionMerger;
   private readonly sqlHelper: SqlHelper;
+  private readonly appConfigManager: AppConfigManager;
 
   constructor(options?: LSMSDKOptions) {
-    const appConfigManager = AppConfigManager.new(options?.configPath, options?.sdkConfigPath);
-    const labelsConfig = appConfigManager.getLabelsConfig();
-    const extensions = appConfigManager.getExtensions();
+    this.appConfigManager = AppConfigManager.new(options?.configPath, options?.sdkConfigPath);
+    const labelsConfig = this.appConfigManager.getLabelsConfig();
+    const extensions = this.appConfigManager.getExtensions();
     
     let llm: LLM;
     if (options?.llm) {
@@ -87,17 +91,80 @@ export class LSMSDK {
       llm = options.llm;
     } else {
       // 从 lsm-sdk-js.yaml 读取 LLM 配置
-      const llmConfig = appConfigManager.getLLMConfig();
+      const llmConfig = this.appConfigManager.getLLMConfig();
       llm = new OpenAILLM(llmConfig);
     }
     
-    this.database = DatabaseFactory.create(appConfigManager, labelsConfig);
+    this.database = DatabaseFactory.create(this.appConfigManager, labelsConfig);
     this.llmManager = new LLMManager(llm);
     
     this.sqlHelper = SqlHelper.create(labelsConfig);
     this.sqlHelper.setExtensions(extensions);
     this.queryExecutor = new QueryExecutor(this.database, this.sqlHelper, extensions);
     this.extMerger = new ExtensionMerger(extensions);
+  }
+
+  /**
+   * 获取完整的 labels 配置
+   */
+  getLabelsConfig() {
+    return this.appConfigManager.getLabelsConfig();
+  }
+
+  /**
+   * 获取数据库配置
+   */
+  getDatabaseConfig() {
+    return this.appConfigManager.getLabelsConfig().database;
+  }
+
+  /**
+   * 获取数据库文件路径
+   */
+  getDatabasePath() {
+    return this.appConfigManager.getDatabasePath();
+  }
+
+  /**
+   * 获取所有标签映射配置
+   */
+  getLabelMappings() {
+    return this.appConfigManager.getLabelsConfig().mappings;
+  }
+
+  /**
+   * 获取所有扩展标签配置
+   */
+  getExtensions() {
+    return this.appConfigManager.getExtensions();
+  }
+
+  /**
+   * 根据 ID 获取标签映射配置
+   */
+  getLabelMappingById(id: string) {
+    return this.appConfigManager.getLabelsConfig().mappings.find(m => m.id === id);
+  }
+
+  /**
+   * 根据 ID 获取扩展标签配置
+   */
+  getExtensionById(id: string) {
+    return this.appConfigManager.getExtensionById(id);
+  }
+
+  /**
+   * 获取配置目录路径
+   */
+  getConfigDir() {
+    return this.appConfigManager.getConfigDir();
+  }
+
+  /**
+   * 获取 labels.yaml 原始内容
+   */
+  getLabelsYamlContent() {
+    return this.appConfigManager.getMainMappingsSimplifiedText();
   }
 
   /**
