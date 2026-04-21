@@ -171,7 +171,8 @@ mappings:
 | `description` | 否 | AI 理解标签用途的描述 |
 | `condition` | 否 | SQL WHERE 条件 |
 | `value` | 否 | 返回结果使用的字段 |
-| `items` | 否 | 枚举值列表 |
+| `items` | 否 | 枚举值列表（有 items 时为标签值筛选） |
+| `range` | 否 | 数值范围约束（有 range 时为数值类型），如 `{ min: 0, max: 5000 }` |
 
 ### extensions/ 扩展标签
 
@@ -205,13 +206,19 @@ interface LSMSDKOptions {
 ### `sdk.query(options)`
 
 ```typescript
+interface ExtensionInfo {
+  id: string;
+  values: string[];
+}
+
 interface QueryOptions {
-  query?: string;      // 自然语言查询
-  sql?: string;         // 原始 SQL（与 query 二选一）
-  page?: number;        // 页码，默认 1
-  pageSize?: number;    // 每页数量，默认 20
+  query?: string;           // 自然语言查询
+  sql?: string;              // 原始 SQL（与 query 二选一）
+  page?: number;             // 页码，默认 1
+  pageSize?: number;         // 每页数量，默认 20
   mode?: 'list' | 'detail';  // 查询模式，默认 'list'
-  extensions?: string[]; // 扩展标签值
+  extensions?: ExtensionInfo[]; // 扩展标签（id+values格式）
+  systemPrompt?: string;      // 额外的系统提示词
 }
 ```
 
@@ -227,8 +234,72 @@ interface QueryOptions {
   "pageSize": 20,
   "totalPages": 5,
   "sql": "SELECT * FROM products WHERE price > 50 LIMIT 20",
-  "explanation": "查询价格大于50的产品"
+  "explanation": "查询价格大于50的产品",
+  "extra": "额外输出内容" // 根据 systemPrompt 输出
 }
+```
+
+### 新功能使用示例
+
+#### 1. id+values 筛选
+```typescript
+const result = await sdk.query({
+  extensions: [
+    { id: 'category', values: ['电子产品'] },
+    { id: 'brand', values: ['Apple'] }
+  ]
+});
+```
+
+#### 2. 数值比较
+```typescript
+const result = await sdk.query({
+  extensions: [
+    { id: 'price', values: ['>1000'] },     // 大于
+    { id: 'stock', values: ['<=50'] }       // 小于等于
+  ]
+});
+```
+
+#### 3. 数值范围查询
+```typescript
+const result = await sdk.query({
+  extensions: [
+    { id: 'price', values: ['1000~5000'] }, // 范围
+    { id: 'price', values: ['~5000'] },     // 只上限
+    { id: 'price', values: ['1000~'] }      // 只下限
+  ]
+});
+```
+
+#### 4. 模糊匹配
+```typescript
+const result = await sdk.query({
+  extensions: [
+    { id: 'name', values: ['手机'] }
+  ]
+});
+```
+
+#### 5. 额外系统提示词和 extra 返回字段
+```typescript
+const result = await sdk.query({
+  query: '找一款手机',
+  systemPrompt: '请分析这款手机的优缺点'
+});
+
+console.log(result.extra); // AI 根据 systemPrompt 输出的额外内容
+```
+
+#### 6. 混合使用
+```typescript
+const result = await sdk.query({
+  extensions: [
+    { id: 'category', values: ['电子产品'] },
+    { id: 'price', values: ['1000~5000'] }
+  ],
+  systemPrompt: '优先推荐销量高的产品'
+});
 ```
 
 ## CLI 工具
