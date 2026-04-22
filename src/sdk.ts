@@ -219,13 +219,8 @@ export class LSMSDK {
       fullSqlStr = appendWhereCondition(fullSqlStr, whereCondition);
     }
 
-    // 添加排序
-    if (parseResult?.order) {
-      fullSqlStr += ` ORDER BY ${parseResult.order}`;
-    }
-
     // AI 没分析出来（where 和 order 都为空）时报错
-    if (query && !explanation && !whereCondition && !parseResult?.order) {
+    if (query && !parseResult?.where && !parseResult?.order) {
       throw new Error('AI 未能理解查询条件，请尝试更具体地描述');
     }
 

@@ -209,6 +209,7 @@ export class SqlHelper {
         : `${sql} WHERE ${where}`;
     }
     if (parseResult.limit) sql += ` LIMIT ${parseResult.limit}`;
+    if (parseResult.order) sql += ` ORDER BY ${parseResult.order}`;
     return sql;
   }
 
