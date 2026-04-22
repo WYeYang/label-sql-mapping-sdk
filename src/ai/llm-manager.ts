@@ -6,6 +6,7 @@ import { AppConfigManager } from '../config/app-config';
 export interface ParseResult {
   where: string;
   limit?: number;
+  order?: string;           // 排序字段，如 "RANDOM()" 或 "RAND()"
   explanation?: string;
   extensions: any[];
   extra?: any;
@@ -16,6 +17,8 @@ export interface Stage1Result {
   where: string;
   /** limit */
   limit?: number;
+  /** 排序字段，如 "RANDOM()" */
+  order?: string;
   /** explanation */
   explanation?: string;
   /** 能直接确定的 id-values 绑定（留空） */
@@ -54,6 +57,7 @@ export class LLMManager {
       return {
         where: stage1Result.where || '',
         limit: stage1Result.limit,
+        order: stage1Result.order,
         explanation: stage1Result.explanation || '',
         extensions: [],
         extra: stage1Result.extra
@@ -71,6 +75,7 @@ export class LLMManager {
       stage1Result.keywords,
       stage1Result.where,
       stage1Result.explanation,
+      stage1Result.order,
       extraSystemPrompt
     );
     console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
@@ -98,10 +103,18 @@ ${extraSystemPrompt}
 ## 任务
 分析用户的自然语言查询
 
+## 重要规则
+- 如果无法分析出有效的 WHERE 条件，请返回空的 WHERE 条件字符串 ""
+- 如果用户要求随机取N条数据（如"随便抽一张"、"随机选几张"），需要同时生成对应的 ORDER BY RANDOM() 和 LIMIT N 条件
+
 ## 输出格式（JSON）
 {
   ##筛选条件，整体用一对括号包裹，不带WHERE关键字
   "where": ...,
+  ##用户指定的数量，没指定返回 null
+  "limit": ...,
+  ##排序字段，如 "RANDOM()"（用于随机查询），没指定返回 null
+  "order": ...,
   ##查询说明对生成的where解释
   "explanation": ...,
   ##生成查询不到where条件,需要下一步确认的关键词
@@ -135,6 +148,7 @@ ${extraSystemPrompt}
     keywords: string[],
     stage1Where: string,
     stage1Explanation?: string,
+    stage1Order?: string,
     extraSystemPrompt?: string
   ): Promise<Stage1Result> {
     let systemPrompt = `你是一个SQL查询生成器。
@@ -151,6 +165,9 @@ ${stage1Where}
 
 ## 上一步生成的解释{{stage1_explanation}}:
 ${stage1Explanation || ''}
+
+## 上一步的排序字段{{stage1_order}}:
+${stage1Order || ''}
 
 ## 上一步无法确定条件的关键词{{keyword}}:
 ${keywords.join(', ')}
@@ -171,6 +188,8 @@ ${extraSystemPrompt}
   "where": "(...)",
   # 用户指定的数量，没指定返回 null
   "limit": ...,
+  ##排序字段，如 "RANDOM()"，直接使用上一步的 stage1_order
+  "order": "${stage1Order || ''}",
   ##查询说明对最后生成的where解释
   "explanation": ...,
   ##匹配到的额外信息的id和values,只根据{{keyword}}和{{extension_info}}生成,并且没有提取条件到where的才需要生成

@@ -197,26 +197,27 @@ export class LSMSDK {
     let explanation: string | undefined;
     let extra: any;
     let fullSqlStr = sql ?? '';
+    let parseResult: any = null;
 
     if (query) {
-      const result = await this.llmManager.parseQuery(query, systemPrompt);
-      explanation = result.explanation;
-      extra = result.extra;
+      parseResult = await this.llmManager.parseQuery(query, systemPrompt);
+      explanation = parseResult.explanation;
+      extra = parseResult.extra;
       
       // 合并 extensions
-      aiExtensions.push(...(result.extensions ?? []));
+      aiExtensions.push(...(parseResult.extensions ?? []));
       
       // 构建完整SQL（使用 fromClause 避免硬编码表名）
       const baseSelect = `SELECT ${this.sqlHelper.fromClause}`;
-      if (result.where) {
-        const where = result.where.trim();
+      if (parseResult.where) {
+        const where = parseResult.where.trim();
         fullSqlStr = where.toUpperCase().startsWith('WHERE ') 
           ? `${baseSelect} ${where}`
           : `${baseSelect} WHERE ${where}`;
       } else {
         fullSqlStr = baseSelect;
       }
-      if (result.limit) fullSqlStr += ` LIMIT ${result.limit}`;
+      if (parseResult.limit) fullSqlStr += ` LIMIT ${parseResult.limit}`;
     } else if (sql) {
       fullSqlStr = sql;
     } else {
@@ -232,6 +233,16 @@ export class LSMSDK {
     const whereCondition = this.extMerger.buildWhereConditions(aiExtensions);
     if (whereCondition) {
       fullSqlStr = appendWhereCondition(fullSqlStr, whereCondition);
+    }
+
+    // 添加排序
+    if (parseResult?.order) {
+      fullSqlStr += ` ORDER BY ${parseResult.order}`;
+    }
+
+    // AI 没分析出来（where 和 order 都为空）时报错
+    if (query && !explanation && !whereCondition && !parseResult?.order) {
+      throw new Error('AI 未能理解查询条件，请尝试更具体地描述');
     }
 
     if (!fullSqlStr.trim()) {
