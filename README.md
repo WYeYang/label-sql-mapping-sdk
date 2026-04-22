@@ -203,7 +203,6 @@ import {
   MappingItem,
   ExtensionMapping,
   LLMConfig,
-  QueryMode,
   LLM,
   ExtensionInfo
 } from 'label-sql-mapping-sdk';
@@ -234,8 +233,7 @@ interface QueryOptions {
   sql?: string;              // 原始 SQL（与 query 二选一）
   page?: number;             // 页码，默认 1
   pageSize?: number;         // 每页数量，默认 20
-  mode?: 'list' | 'detail';  // 查询模式，默认 'list'
-  extensions?: ExtensionInfo[]; // 扩展标签（id+values格式）
+  extensions?: ExtensionInfo[]; // 扩展标签（id+values格式），传 { id: 'id', values: ['12345'] } 查单条详情
   systemPrompt?: string;      // 额外的系统提示词
 }
 ```
@@ -286,6 +284,15 @@ const result = await sdk.query({
     { id: 'price', values: ['1000~5000'] }, // 范围
     { id: 'price', values: ['~5000'] },     // 只上限
     { id: 'price', values: ['1000~'] }      // 只下限
+  ]
+});
+```
+
+#### 4. 查询单条详情（通过 id）
+```typescript
+const result = await sdk.query({
+  extensions: [
+    { id: 'id', values: ['12345'] }
   ]
 });
 ```
