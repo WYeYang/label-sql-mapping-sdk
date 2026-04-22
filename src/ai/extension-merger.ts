@@ -91,7 +91,7 @@ export class ExtensionMerger {
         }
 
         // 情况 2：没匹配到 items 或没有 items → 尝试解析约定值
-        if (!matched && extMapping.condition && extMapping.value) {
+        if (!matched && extMapping.value) {
           const parsedCondition = this.parseConventionValue(extMapping.value, value);
           if (parsedCondition) {
             valueConditions.push(parsedCondition);
@@ -101,7 +101,7 @@ export class ExtensionMerger {
 
       // 拼接条件
       if (valueConditions.length) {
-        const extCondition = `(${valueConditions.join(' OR ')})`;
+        const extCondition = valueConditions.length === 1 ? valueConditions[0] : `(${valueConditions.join(' OR ')})`;
         if (extMapping.condition) {
           conditions.push(`(${extMapping.condition} AND ${extCondition})`);
         } else {
@@ -153,6 +153,11 @@ export class ExtensionMerger {
     }
 
     // 约定 3：默认模糊匹配（无 items 时）
+    // 如果是纯数字，用等于而不是 LIKE
+    const num = Number(trimmedValue);
+    if (!isNaN(num)) {
+      return `${field} = ${num}`;
+    }
     return `${field} LIKE '%${trimmedValue.replace(/'/g, "''")}%'`;
   }
 

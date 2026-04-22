@@ -97,10 +97,11 @@ export class LSMSDK {
     this.database = DatabaseFactory.create(this.appConfigManager, labelsConfig);
     this.llmManager = new LLMManager(llm);
     
+    const allMappings = this.appConfigManager.getAllMappings();
     this.sqlHelper = SqlHelper.create(labelsConfig);
-    this.sqlHelper.setExtensions(extensions);
-    this.queryExecutor = new QueryExecutor(this.database, this.sqlHelper, extensions);
-    this.extMerger = new ExtensionMerger(extensions);
+    this.sqlHelper.setExtensions(allMappings);
+    this.queryExecutor = new QueryExecutor(this.database, this.sqlHelper, allMappings);
+    this.extMerger = new ExtensionMerger(allMappings);
   }
 
   /**
@@ -170,49 +171,40 @@ export class LSMSDK {
    * 自然语言查询
    * @param options.query 自然语言查询
    * @param options.sql 原始SQL（与query二选一）
-   * @param options.id 卡片ID（单条详情查询，优先级最高）
    * @param options.page 页码，默认1
    * @param options.pageSize 每页数量，默认20
-   * @param options.extensions 扩展标签（id+values格式）
+   * @param options.extensions 扩展标签（id+values格式），传 { id: 'id', values: ['12345'] } 查单条详情
    * @param options.systemPrompt 额外的系统提示词
    */
   async query(options: {
     query?: string;
     sql?: string;
-    id?: number;
     page?: number;
     pageSize?: number;
     extensions?: ExtensionInfo[];
     systemPrompt?: string;
   }): Promise<QueryResult> {
-    const { query, sql, id, page = 1, pageSize = 20, systemPrompt } = options;
+    const { query, sql, page = 1, pageSize = 20, systemPrompt } = options;
 
-    // 当传入 id 时，用 detail 模式查询单条
-    if (id !== undefined) {
-      const baseSelect = `SELECT ${this.sqlHelper.fromClause}`;
-      const fullSqlStr = `${baseSelect} WHERE d.id = ${id}`;
-      const execResult = this.queryExecutor.execute(fullSqlStr, 1, 1, 'detail', []);
-      return {
-        ...execResult,
-        sql: fullSqlStr,
-        explanation: undefined,
-        extra: undefined
-      };
-    }
+    // 检测 extensions 中是否有 id='id'，如果有则用 detail 模式
+    const aiExtensions: ExtensionInfo[] = options.extensions ?? [];
+    const idExtension = aiExtensions.find(ext => ext.id === 'id');
+    const isDetailMode = !!idExtension;
+    const usePage = isDetailMode ? 1 : page;
+    const usePageSize = isDetailMode ? 1 : pageSize;
+    const useMode = isDetailMode ? 'detail' : 'list';
 
     let explanation: string | undefined;
     let extra: any;
     let fullSqlStr = sql ?? '';
 
-    // 构建 extensions：外部传入的 extensions
-    let aiExtensions: ExtensionInfo[] = options.extensions ?? [];
     if (query) {
       const result = await this.llmManager.parseQuery(query, systemPrompt);
       explanation = result.explanation;
       extra = result.extra;
       
       // 合并 extensions
-      aiExtensions = [...aiExtensions, ...(result.extensions ?? [])];
+      aiExtensions.push(...(result.extensions ?? []));
       
       // 构建完整SQL（使用 fromClause 避免硬编码表名）
       const baseSelect = `SELECT ${this.sqlHelper.fromClause}`;
@@ -246,7 +238,7 @@ export class LSMSDK {
       throw new Error('SQL不能为空');
     }
 
-    const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize, 'list', aiExtensions);
+    const execResult = this.queryExecutor.execute(fullSqlStr, usePage, usePageSize, useMode, aiExtensions);
     
     return {
       ...execResult,

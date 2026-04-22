@@ -307,6 +307,13 @@ export class AppConfigManager {
   }
 
   /**
+   * 获取所有 mappings（mappings + extensions）
+   */
+  getAllMappings(): ExtensionMapping[] {
+    return this.allMappings as ExtensionMapping[];
+  }
+
+  /**
    * 用 keywords 搜索 extension mappings（只搜索 extensions）
    */
   searchByKeywords(keywords: string[]): string {
