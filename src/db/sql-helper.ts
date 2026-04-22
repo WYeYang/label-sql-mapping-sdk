@@ -191,6 +191,28 @@ export class SqlHelper {
   }
 
   /**
+   * 构建基础 SQL（SELECT FROM）
+   */
+  buildBaseSql(): string {
+    return `SELECT ${this.fromClause}`;
+  }
+
+  /**
+   * 从 parseResult 构建初始 SQL
+   */
+  buildInitialSql(parseResult: any): string {
+    let sql = this.buildBaseSql();
+    if (parseResult.where) {
+      const where = parseResult.where.trim();
+      sql = where.toUpperCase().startsWith('WHERE ') 
+        ? `${sql} ${where}`
+        : `${sql} WHERE ${where}`;
+    }
+    if (parseResult.limit) sql += ` LIMIT ${parseResult.limit}`;
+    return sql;
+  }
+
+  /**
    * 构建完整查询 SQL（主标签 + 扩展标签）
    */
   buildQuerySql(whereAndAfter: string, extensions: ExtensionMapping[], pageSize: number, offset: number): string {

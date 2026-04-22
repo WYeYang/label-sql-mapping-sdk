@@ -203,30 +203,14 @@ export class LSMSDK {
       parseResult = await this.llmManager.parseQuery(query, systemPrompt);
       explanation = parseResult.explanation;
       extra = parseResult.extra;
-      
-      // 合并 extensions
       aiExtensions.push(...(parseResult.extensions ?? []));
-      
-      // 构建完整SQL（使用 fromClause 避免硬编码表名）
-      const baseSelect = `SELECT ${this.sqlHelper.fromClause}`;
-      if (parseResult.where) {
-        const where = parseResult.where.trim();
-        fullSqlStr = where.toUpperCase().startsWith('WHERE ') 
-          ? `${baseSelect} ${where}`
-          : `${baseSelect} WHERE ${where}`;
-      } else {
-        fullSqlStr = baseSelect;
-      }
-      if (parseResult.limit) fullSqlStr += ` LIMIT ${parseResult.limit}`;
+      fullSqlStr = this.sqlHelper.buildInitialSql(parseResult);
     } else if (sql) {
       fullSqlStr = sql;
+    } else if (aiExtensions.length > 0) {
+      fullSqlStr = this.sqlHelper.buildBaseSql();
     } else {
-      // 如果没有 query 和 sql，但有 extensions，也可以查询
-      if (aiExtensions.length === 0) {
-        throw new Error('请提供 query 或 sql 或 extensions 参数');
-      }
-      // 基础 SQL
-      fullSqlStr = `SELECT ${this.sqlHelper.fromClause}`;
+      throw new Error('请提供 query 或 sql 或 extensions 参数');
     }
 
     // 根据 extensions 构建 WHERE 条件并拼接到 SQL
