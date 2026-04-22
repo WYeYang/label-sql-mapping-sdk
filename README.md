@@ -400,3 +400,57 @@ npm install lsm-xxx-database
 ```
 
 只需安装不同的 `lsm-*` 配置包，SDK 代码无需改动。
+
+## 配置访问方法
+
+> **查看完整示例**: [examples/sdk-return-examples.json](examples/sdk-return-examples.json) - 各类返回结果的 JSON 示例  
+> **快速开始**: [examples/quick-start.ts](examples/quick-start.ts) - 可运行的 TypeScript 示例代码
+
+SDK 开放了直接访问读取成功配置的功能：
+
+```typescript
+// 获取完整的 labels 配置
+const labelsConfig = sdk.getLabelsConfig();
+
+// 获取数据库配置
+const dbConfig = sdk.getDatabaseConfig();
+
+// 获取数据库文件路径
+const dbPath = sdk.getDatabasePath();
+
+// 获取所有标签映射配置
+const labelMappings = sdk.getLabelMappings();
+
+// 获取所有扩展标签配置
+const extensions = sdk.getExtensions();
+
+// 根据 ID 获取标签映射配置
+const mapping = sdk.getLabelMappingById('price');
+
+// 根据 ID 获取扩展标签配置
+const extension = sdk.getExtensionById('brand');
+
+// 获取配置目录路径
+const configDir = sdk.getConfigDir();
+
+// 获取 labels.yaml 原始内容
+const labelsYaml = sdk.getLabelsYamlContent();
+```
+
+### 导出类型
+
+SDK 导出以下类型供使用：
+
+```typescript
+import {
+  LSMConfig,
+  DatabaseConfig,
+  LabelMapping,
+  MappingItem,
+  ExtensionMapping,
+  LLMConfig,
+  QueryMode,
+  LLM,
+  ExtensionInfo
+} from 'label-sql-mapping-sdk';
+```
