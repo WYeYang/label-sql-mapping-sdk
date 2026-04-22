@@ -103,6 +103,7 @@ export class AppConfigManager {
   private allMappings: ExtensionMapping[] = [];  // 合并后的列表
   private extensionsSimplifiedText: string | null = null;
   private labelsYamlContent: string | null = null;  // 缓存 labels.yaml 内容
+  private sdkConfig: any = null;  // 缓存 lsm-sdk-js.yaml 配置
 
   private constructor(
     public readonly labelsPath: string,
@@ -209,17 +210,30 @@ export class AppConfigManager {
     this.allMappings = [...labelMappings, ...extensionMappings] as any[];
   }
 
-  getDatabasePath(): string {
-    if (!this.labelsConfig) {
-      throw new Error('标签配置未初始化');
+  /**
+   * 获取 SDK 配置（lsm-sdk-js.yaml）
+   */
+  getSDKConfig(): any {
+    if (this.sdkConfig) {
+      return this.sdkConfig;
     }
-    let dbPath = this.labelsConfig.database?.path;
+    if (!fs.existsSync(this.sdkConfigPath)) {
+      throw new Error('错误: 找不到 lsm-sdk-js.yaml 配置文件');
+    }
+    const sdkContent = fs.readFileSync(this.sdkConfigPath, 'utf8');
+    this.sdkConfig = yaml.parse(sdkContent);
+    return this.sdkConfig;
+  }
+
+  getDatabasePath(): string {
+    const sdkConfig = this.getSDKConfig();
+    let dbPath = sdkConfig?.databasePath;
     if (!dbPath) {
-      throw new Error('错误: 请在 labels.yaml 中配置数据库文件路径');
+      throw new Error('错误: 请在 lsm-sdk-js.yaml 中配置 databasePath');
     }
     if (!path.isAbsolute(dbPath)) {
-      // 从 labels.yaml 所在目录解析相对路径
-      const configDir = path.dirname(this.labelsPath);
+      // 从 lsm-sdk-js.yaml 所在目录解析相对路径
+      const configDir = path.dirname(this.sdkConfigPath);
       return path.resolve(configDir, dbPath);
     }
     return dbPath;
@@ -227,13 +241,8 @@ export class AppConfigManager {
 
   getLLMConfig(): LLMConfig {
     // 从 lsm-sdk-js.yaml 中查找 llm 配置
-    if (!fs.existsSync(this.sdkConfigPath)) {
-      throw new Error('错误: 找不到 lsm-sdk-js.yaml 配置文件');
-    }
-    
-    const sdkContent = fs.readFileSync(this.sdkConfigPath, 'utf8');
-    const sdkParsed = yaml.parse(sdkContent);
-    const llmConfig = sdkParsed?.llm;
+    const sdkConfig = this.getSDKConfig();
+    const llmConfig = sdkConfig?.llm;
     
     if (!llmConfig) {
       throw new Error('错误: 请在 lsm-sdk-js.yaml 中配置 LLM');

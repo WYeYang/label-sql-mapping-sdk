@@ -1,5 +1,7 @@
 // LSM 配置类型定义
 
+import type { LLMConfig } from '../ai';
+
 /**
  * 数据库类型
  */
@@ -25,8 +27,15 @@ export interface TableConfig {
  */
 export interface DatabaseConfig {
   type: DatabaseType;    // 数据库类型
-  path?: string;        // 数据库文件路径
   tables: TableConfig[]; // 表配置数组
+}
+
+/**
+ * SDK 配置（lsm-sdk-js.yaml）
+ */
+export interface SDKConfig {
+  llm?: LLMConfig;
+  databasePath?: string;  // 数据库文件路径
 }
 
 /**
