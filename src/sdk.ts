@@ -13,7 +13,6 @@ import { QueryResult as BaseQueryResult } from './db/types';
 
 dotenv.config();
 
-export { QueryMode } from './db/query-executor';
 export { LLM } from './ai/types';
 export { ExtensionInfo } from './ai/extension-merger';
 export { LSMConfig, DatabaseConfig, LabelMapping, MappingItem } from './config/types';
@@ -171,22 +170,35 @@ export class LSMSDK {
    * 自然语言查询
    * @param options.query 自然语言查询
    * @param options.sql 原始SQL（与query二选一）
+   * @param options.id 卡片ID（单条详情查询，优先级最高）
    * @param options.page 页码，默认1
    * @param options.pageSize 每页数量，默认20
-   * @param options.mode 查询模式：list(列表) 或 detail(详情)
    * @param options.extensions 扩展标签（id+values格式）
    * @param options.systemPrompt 额外的系统提示词
    */
   async query(options: {
     query?: string;
     sql?: string;
+    id?: number;
     page?: number;
     pageSize?: number;
-    mode?: QueryMode;
     extensions?: ExtensionInfo[];
     systemPrompt?: string;
   }): Promise<QueryResult> {
-    const { query, sql, page = 1, pageSize = 20, mode = 'list', systemPrompt } = options;
+    const { query, sql, id, page = 1, pageSize = 20, systemPrompt } = options;
+
+    // 当传入 id 时，用 detail 模式查询单条
+    if (id !== undefined) {
+      const baseSelect = `SELECT ${this.sqlHelper.fromClause}`;
+      const fullSqlStr = `${baseSelect} WHERE d.id = ${id}`;
+      const execResult = this.queryExecutor.execute(fullSqlStr, 1, 1, 'detail', []);
+      return {
+        ...execResult,
+        sql: fullSqlStr,
+        explanation: undefined,
+        extra: undefined
+      };
+    }
 
     let explanation: string | undefined;
     let extra: any;
@@ -234,7 +246,7 @@ export class LSMSDK {
       throw new Error('SQL不能为空');
     }
 
-    const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize, mode, aiExtensions);
+    const execResult = this.queryExecutor.execute(fullSqlStr, page, pageSize, 'list', aiExtensions);
     
     return {
       ...execResult,
