@@ -53,7 +53,7 @@ export class LLMManager {
       console.log('[LLMManager] 无关键词，跳过 Stage2');
       return {
         where: stage1Result.where || '',
-        limit: stage1Result.limit || 10,
+        limit: stage1Result.limit,
         explanation: stage1Result.explanation || '',
         extensions: [],
         extra: stage1Result.extra
