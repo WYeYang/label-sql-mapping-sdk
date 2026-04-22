@@ -5,8 +5,8 @@ import { AppConfigManager } from '../config/app-config';
 
 export interface ParseResult {
   where: string;
-  limit: number;
-  explanation: string;
+  limit?: number;
+  explanation?: string;
   extensions: any[];
   extra?: any;
 }
@@ -75,13 +75,7 @@ export class LLMManager {
     );
     console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
 
-    return {
-      where: stage2Result.where || '',
-      limit: stage2Result.limit || 10,
-      explanation: stage2Result.explanation || '',
-      extensions: stage2Result.extensions || [],
-      extra: stage2Result.extra
-    };
+    return stage2Result;
   }
 
   /**
