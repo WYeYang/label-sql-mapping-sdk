@@ -7,6 +7,10 @@ import type { ExtensionMapping, MappingItem } from '../config';
  * 从完整SQL中提取WHERE及后面的所有内容（含ORDER BY/LIMIT/OFFSET）
  */
 export function extractWhereAndAfter(sql: string): string {
+  // 如果没有 WHERE，直接返回原 SQL（保留 LIMIT 和 ORDER BY）
+  if (!/\bWHERE\b/i.test(sql)) {
+    return sql;
+  }
   return sql.match(/WHERE\s+.+$/i)?.[0].trim() ?? '';
 }
 
