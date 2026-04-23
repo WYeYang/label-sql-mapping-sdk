@@ -54,14 +54,7 @@ export class LLMManager {
     // 如果没有关键词，直接返回 Stage1 结果，跳过 Stage2
     if (!stage1Result.keywords || stage1Result.keywords.length === 0) {
       console.log('[LLMManager] 无关键词，跳过 Stage2');
-      return {
-        where: stage1Result.where || '',
-        limit: stage1Result.limit,
-        order: stage1Result.order,
-        explanation: stage1Result.explanation || '',
-        extensions: [],
-        extra: stage1Result.extra
-      };
+      return stage1Result;
     }
 
     // 代码用关键词搜索 items
@@ -106,6 +99,7 @@ ${extraSystemPrompt}
 ## 重要规则
 - 如果无法分析出有效的 WHERE 条件，请返回空的 WHERE 条件字符串 ""
 - 如果用户要求随机取N条数据（如"随便抽一张"、"随机选几张"），需要同时生成对应的 ORDER BY RANDOM() 和 LIMIT N 条件
+- **重要**：如果根据某个关键词生成了 WHERE 条件，这个关键词就不要放到 keywords 中了
 
 ## 输出格式（JSON）
 {
@@ -117,7 +111,7 @@ ${extraSystemPrompt}
   "order": ...,
   ##查询说明对生成的where解释
   "explanation": ...,
-  ##生成查询不到where条件,需要下一步确认的关键词
+  ##生成查询不到where条件,需要下一步确认的关键词（注意：已在where中使用的关键词不要再放到这里）
   "keywords": [...],
   ##额外输出字段（根据额外说明生成）
   "extra": ...
@@ -181,6 +175,9 @@ ${extraSystemPrompt}
 
 目标: 根据查询结果和用户输入生成新的条件拼接到上一步生成的where条件后面,并且按照下面输出格式生成其他信息
 
+## 重要规则
+- **重要**：如果根据某个关键词生成了 WHERE 条件，这个关键词就不要放到 extensions 中了
+
 ## 输出格式(JSON)
 {
   ##筛选条件，整体用一对括号包裹，如 "(field = 100 AND type = 'book')"，不带WHERE关键字
@@ -192,7 +189,7 @@ ${extraSystemPrompt}
   "order": "${stage1Order || ''}",
   ##查询说明对最后生成的where解释
   "explanation": ...,
-  ##匹配到的额外信息的id和values,只根据{{keyword}}和{{extension_info}}生成,并且没有提取条件到where的才需要生成
+  ##匹配到的额外信息的id和values,只根据{{keyword}}和{{extension_info}}生成,并且已在where中使用的关键词不要放到这里
   "extensions": [
     {"id": "标签ID", "values": ["匹配的values"]}
   ]
