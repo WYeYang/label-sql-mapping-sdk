@@ -11,7 +11,9 @@ export function extractWhereAndAfter(sql: string): string {
   if (!/\bWHERE\b/i.test(sql)) {
     return sql;
   }
-  return sql.match(/WHERE\s+.+$/i)?.[0].trim() ?? '';
+  // 提取 WHERE 及其后面的所有内容（包括 LIMIT 和 ORDER BY）
+  const match = sql.match(/\bWHERE\b\s+(.+)$/is);
+  return match ? match[0].trim() : sql;
 }
 
 /** 判断SQL是否包含LIMIT */
