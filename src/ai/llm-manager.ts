@@ -86,20 +86,20 @@ export class LLMManager {
   ): Promise<Stage1Result> {
     let systemPrompt = `你是一个SQL查询分析器。
 
+## 任务
+分析用户的消息
+
+## 重要规则
+- 如果无法分析出有效的 WHERE 条件，请返回空的 WHERE 条件字符串 ""
+- 如果用户要求随机取N条数据（如"随便抽一张"、"随机选几张"），需要同时生成对应的 ORDER BY RANDOM() 和 LIMIT N 条件
+- **重要**：如果根据某个关键词生成了 WHERE 条件，这个关键词就不要放到 keywords 中了
+
 ## 数据库字段和查询方法说明:
 ${mainMappingsText}
 
 ## 额外说明:
 ${extraSystemPrompt}
 
-
-## 任务
-分析用户的自然语言查询
-
-## 重要规则
-- 如果无法分析出有效的 WHERE 条件，请返回空的 WHERE 条件字符串 ""
-- 如果用户要求随机取N条数据（如"随便抽一张"、"随机选几张"），需要同时生成对应的 ORDER BY RANDOM() 和 LIMIT N 条件
-- **重要**：如果根据某个关键词生成了 WHERE 条件，这个关键词就不要放到 keywords 中了
 
 ## 输出格式（JSON）
 {
@@ -123,7 +123,7 @@ ${extraSystemPrompt}
 
     const response = await this.llm.chat([
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `查询: ${query}` }
+      { role: 'user', content: query }
     ]);
 
     const jsonStr = response;
@@ -147,12 +147,9 @@ ${extraSystemPrompt}
   ): Promise<Stage1Result> {
     let systemPrompt = `你是一个SQL查询生成器。
 
-## 用户查询
-${query}
+    
+目标: 根据查询结果和用户输入生成新的条件拼接到上一步生成的where条件后面,并且按照输出格式生成其他信息
 
----
-上方是用户的原始问题。下方是系统预处理的结果，参考使用。
----
 
 ## 上一步生成的where条件{{where}}:
 ${stage1Where}
@@ -172,8 +169,6 @@ ${matchedItemsText}
 
 ## 额外说明:
 ${extraSystemPrompt}
-
-目标: 根据查询结果和用户输入生成新的条件拼接到上一步生成的where条件后面,并且按照下面输出格式生成其他信息
 
 ## 重要规则
 - **重要**：如果根据某个关键词生成了 WHERE 条件，这个关键词就不要放到 extensions 中了
@@ -202,7 +197,7 @@ ${extraSystemPrompt}
 
     const response = await this.llm.chat([
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `根据上述配置输出 id 和 values 绑定` }
+      { role: 'user', content: query }
     ]);
 
     const jsonStr = response;

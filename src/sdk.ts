@@ -203,6 +203,12 @@ export class LSMSDK {
       parseResult = await this.llmManager.parseQuery(query, systemPrompt);
       explanation = parseResult.explanation;
       extra = parseResult.extra;
+      
+      // AI 没分析出来时报错
+      if (!parseResult.where && !parseResult.order) {
+        throw new Error('AI 未能理解查询条件，请尝试更具体地描述');
+      }
+      
       aiExtensions.push(...(parseResult.extensions ?? []));
       fullSqlStr = this.sqlHelper.buildInitialSql(parseResult);
     } else if (sql) {
@@ -217,11 +223,6 @@ export class LSMSDK {
     const whereCondition = this.extMerger.buildWhereConditions(aiExtensions);
     if (whereCondition) {
       fullSqlStr = appendWhereCondition(fullSqlStr, whereCondition);
-    }
-
-    // AI 没分析出来（where 和 order 都为空）时报错
-    if (query && !parseResult?.where && !parseResult?.order) {
-      throw new Error('AI 未能理解查询条件，请尝试更具体地描述');
     }
 
     if (!fullSqlStr.trim()) {
