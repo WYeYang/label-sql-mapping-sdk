@@ -43,12 +43,16 @@ export class LLMManager {
   }
 
   async parseQuery(naturalLanguageQuery: string, extraSystemPrompt?: string): Promise<ParseResult> {
+    // 先用 searchByKeywords 搜索匹配的 items
+    const matchedItemsText = await AppConfigManager.get().searchByKeywords(naturalLanguageQuery);
+    console.log('[LLMManager] matched items:\n', matchedItemsText);
+    
     // 获取主配置（带 values 和 description）
     const mainMappingsText = AppConfigManager.get().getMainMappingsSimplifiedText();
     console.log('[LLMManager] mainMappings length:', mainMappingsText.length);
     
-    // 第一轮：预处理
-    const stage1Result = await this.stage1(naturalLanguageQuery, mainMappingsText, extraSystemPrompt);
+    // 第一轮：预处理（传入 matchedItemsText 作为提示词）
+    const stage1Result = await this.stage1(naturalLanguageQuery, mainMappingsText, extraSystemPrompt, matchedItemsText);
     console.log('[LLMManager] stage1:', JSON.stringify(stage1Result));
 
     // 如果没有关键词，直接返回 Stage1 结果，跳过 Stage2
@@ -57,23 +61,21 @@ export class LLMManager {
       return stage1Result;
     }
 
-    // 代码用关键词搜索 items（使用 embedding 语义匹配）
-    const matchedItemsText = await AppConfigManager.get().searchByKeywords(stage1Result.keywords);
-    console.log('[LLMManager] matched items:\n', matchedItemsText);
-
-    // 第二轮：生成 SQL
-    const stage2Result = await this.stage2(
-      naturalLanguageQuery,
-      matchedItemsText,
-      stage1Result.keywords,
-      stage1Result.where,
-      stage1Result.explanation,
-      stage1Result.order,
-      extraSystemPrompt
-    );
-    console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
-
-    return stage2Result;
+    // // 第二轮：生成 SQL（暂时注释）
+    // const stage2Result = await this.stage2(
+    //   naturalLanguageQuery,
+    //   matchedItemsText,
+    //   stage1Result.keywords,
+    //   stage1Result.where,
+    //   stage1Result.explanation,
+    //   stage1Result.order,
+    //   extraSystemPrompt
+    // );
+    // console.log('[LLMManager] stage2:', JSON.stringify(stage2Result));
+    // return stage2Result;
+    
+    // 暂时直接返回 stage1 结果
+    return stage1Result;
   }
 
   /**
@@ -82,7 +84,8 @@ export class LLMManager {
   private async stage1(
     query: string, 
     mainMappingsText: string,
-    extraSystemPrompt?: string
+    extraSystemPrompt?: string,
+    matchedItemsText?: string
   ): Promise<Stage1Result> {
     let systemPrompt = `你是一个SQL查询分析器。
 
@@ -96,7 +99,7 @@ export class LLMManager {
 
 ## 数据库字段和查询方法说明:
 ${mainMappingsText}
-
+${matchedItemsText ? `\n## 根据用户输入搜索到的相关选项（可能包含用户想要的答案）:\n${matchedItemsText}\n` : ''}
 ## 额外说明:
 ${extraSystemPrompt}
 

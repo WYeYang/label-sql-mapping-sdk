@@ -425,9 +425,10 @@ export class AppConfigManager {
 
   /**
    * 用 keywords 搜索 extension mappings（embedding 语义匹配 + 关键词匹配）
+   * @param keywords 用户输入的关键词（字符串）
    */
-  async searchByKeywords(keywords: string[]): Promise<string> {
-    if (!keywords.length) return '';
+  async searchByKeywords(keywords: string): Promise<string> {
+    if (!keywords || !keywords.trim()) return '';
     
     // 确保 embedding 已初始化
     await this.initEmbedding();
@@ -439,21 +440,20 @@ export class AppConfigManager {
     
     // Fallback: 使用关键词匹配
     console.log('[AppConfig] 使用关键词匹配...');
-    const matched = this.keywordSearch(keywords);
+    const matched = this.keywordSearch([keywords]);
     return this.formatSearchResult(matched);
   }
 
   /**
    * Embedding 语义搜索
    */
-  private async embeddingSearch(keywords: string[]): Promise<string> {
+  private async embeddingSearch(keywords: string): Promise<string> {
     if (!this.extractor || !this.embeddingCache || this.embeddingCache.embeddings.length === 0) {
       return '';
     }
     
     // 1. 计算关键词的 embedding
-    const queryText = keywords.join(' ');
-    const queryEmbedding = await this.extractor(queryText, { pooling: 'mean', normalize: true });
+    const queryEmbedding = await this.extractor(keywords, { pooling: 'mean', normalize: true });
     const queryVec: number[] = Array.isArray(queryEmbedding) 
       ? queryEmbedding 
       : Array.from(queryEmbedding as unknown as number[]);
