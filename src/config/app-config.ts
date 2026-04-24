@@ -13,6 +13,15 @@ interface EmbeddingCache {
   embeddings: number[][];  // 对应的 embedding 向量
 }
 
+/** 搜索结果项 */
+export interface SearchResultItem {
+  id: string;
+  name?: string;
+  value: string;
+  description?: string;
+  condition?: string;
+}
+
 /** 计算余弦相似度 */
 function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0, normA = 0, normB = 0;
@@ -125,7 +134,7 @@ export class AppConfigManager {
   
   // Embedding 相关
   private embeddingCache: EmbeddingCache | null = null;
-  private embeddingTexts: string[] = [];  // [mappingId][itemIndex]: "id|value|description"
+  private embeddingItems: SearchResultItem[] = [];  // 存储完整 item 信息
   private extractor: FeatureExtractionPipeline | null = null;
 
   private constructor(
@@ -348,7 +357,7 @@ export class AppConfigManager {
       this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
       
       // 收集所有 items 的文本
-      this.embeddingTexts = [];
+      this.embeddingItems = [];
       const texts: string[] = [];
       
       for (const mapping of this.extensions.values()) {
@@ -357,7 +366,13 @@ export class AppConfigManager {
         for (const item of mapping.items) {
           // 组合 id + value + description 作为检索文本
           const searchText = `${mapping.id} ${item.value} ${item.description || ''}`.trim();
-          this.embeddingTexts.push(`${mapping.id}|${item.value}|${item.description || ''}`);
+          this.embeddingItems.push({
+            id: mapping.id,
+            name: mapping.name,
+            value: item.value,
+            description: item.description,
+            condition: item.condition
+          });
           texts.push(searchText);
         }
       }
@@ -393,13 +408,12 @@ export class AppConfigManager {
   /**
    * 关键词匹配（fallback 方案）
    */
-  private keywordSearch(keywords: string[]): Map<string, any[]> {
-    const matched: Map<string, any[]> = new Map();
+  private keywordSearch(keywords: string[]): SearchResultItem[] {
+    const matched: SearchResultItem[] = [];
+    const valueSet = new Set<string>();  // 去重
     
     for (const mapping of this.extensions.values()) {
       if (!mapping.items || mapping.items.length === 0) continue;
-      
-      const matchedItems: any[] = [];
       
       for (const item of mapping.items) {
         const kwLower = keywords.map(k => k.toLowerCase());
@@ -407,16 +421,16 @@ export class AppConfigManager {
           item.value.toLowerCase().includes(kw) ||
           item.description?.toLowerCase().includes(kw)
         );
-        if (matchedKeyword) {
-          matchedItems.push({
+        if (matchedKeyword && !valueSet.has(item.value)) {
+          matched.push({
+            id: mapping.id,
+            name: mapping.name,
             value: item.value,
-            description: item.description
+            description: item.description,
+            condition: item.condition
           });
+          valueSet.add(item.value);
         }
-      }
-      
-      if (matchedItems.length > 0) {
-        matched.set(mapping.id, matchedItems);
       }
     }
     
@@ -426,30 +440,34 @@ export class AppConfigManager {
   /**
    * 用 keywords 搜索 extension mappings（embedding 语义匹配 + 关键词匹配）
    * @param keywords 用户输入的关键词（字符串）
+   * @returns JSON 格式的匹配 item 列表
    */
   async searchByKeywords(keywords: string): Promise<string> {
-    if (!keywords || !keywords.trim()) return '';
+    if (!keywords || !keywords.trim()) return '[]';
     
     // 确保 embedding 已初始化
     await this.initEmbedding();
     
+    let matched: SearchResultItem[];
+    
     // 检查是否使用 embedding 匹配
     if (this.embeddingCache && this.embeddingCache.embeddings.length > 0) {
-      return this.embeddingSearch(keywords);
+      matched = await this.embeddingSearch(keywords);
+    } else {
+      // Fallback: 使用关键词匹配
+      console.log('[AppConfig] 使用关键词匹配...');
+      matched = this.keywordSearch([keywords]);
     }
     
-    // Fallback: 使用关键词匹配
-    console.log('[AppConfig] 使用关键词匹配...');
-    const matched = this.keywordSearch([keywords]);
-    return this.formatSearchResult(matched);
+    return JSON.stringify(matched);
   }
 
   /**
    * Embedding 语义搜索
    */
-  private async embeddingSearch(keywords: string): Promise<string> {
+  private async embeddingSearch(keywords: string): Promise<SearchResultItem[]> {
     if (!this.extractor || !this.embeddingCache || this.embeddingCache.embeddings.length === 0) {
-      return '';
+      return [];
     }
     
     // 1. 计算关键词的 embedding
@@ -459,16 +477,12 @@ export class AppConfigManager {
       : Array.from(queryEmbedding as unknown as number[]);
     
     // 2. 计算所有 items 与关键词的相似度
-    const scores: { index: number; score: number; text: string }[] = [];
+    const scores: { index: number; score: number }[] = [];
     
     for (let i = 0; i < this.embeddingCache.embeddings.length; i++) {
       const sim = cosineSimilarity(queryVec, this.embeddingCache.embeddings[i]);
       if (sim > 0.3) {  // 相似度阈值
-        scores.push({
-          index: i,
-          score: sim,
-          text: this.embeddingTexts[i]
-        });
+        scores.push({ index: i, score: sim });
       }
     }
     
@@ -476,44 +490,19 @@ export class AppConfigManager {
     scores.sort((a, b) => b.score - a.score);
     const topScores = scores.slice(0, 10);
     
-    // 4. 按 mapping 分组
-    const matched: Map<string, any[]> = new Map();
+    // 4. 获取对应的 item 信息
+    const matched: SearchResultItem[] = [];
+    const valueSet = new Set<string>();
     
-    for (const { text } of topScores) {
-      const parts = text.split('|');
-      const mappingId = parts[0];
-      const value = parts[1];
-      const description = parts[2];
-      
-      if (!matched.has(mappingId)) {
-        matched.set(mappingId, []);
-      }
-      
-      const items = matched.get(mappingId)!;
-      // 避免重复
-      if (!items.find(i => i.value === value)) {
-        items.push({ value, description });
+    for (const { index } of topScores) {
+      const item = this.embeddingItems[index];
+      if (item && !valueSet.has(item.value)) {
+        matched.push(item);
+        valueSet.add(item.value);
       }
     }
     
-    return this.formatSearchResult(matched);
-  }
-
-  /**
-   * 格式化搜索结果
-   */
-  private formatSearchResult(matched: Map<string, any[]>): string {
-    const lines: string[] = [];
-    for (const [id, items] of matched) {
-      lines.push(`${id}:`);
-      for (const item of items) {
-        lines.push(`  - value: ${item.value}`);
-        if (item.description && item.description !== '无') {
-          lines.push(`    description: ${item.description}`);
-        }
-      }
-    }
-    return lines.join('\n');
+    return matched;
   }
 
   /**
