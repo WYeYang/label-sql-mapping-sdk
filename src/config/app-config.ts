@@ -353,7 +353,7 @@ export class AppConfigManager {
     if (this.extractor !== undefined) return; // 已初始化（包括失败）
     
     try {
-      console.log('[AppConfig] 尝试初始化 embedding 模型...');
+      console.log('[AppConfig] 开始初始化 embedding 模型 (all-MiniLM-L6-v2)...');
       this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
       
       // 收集所有 items 的文本
@@ -398,7 +398,7 @@ export class AppConfigManager {
       }
       
       this.embeddingCache = { texts, embeddings };
-      console.log(`[AppConfig] Embedding 缓存就绪`);
+      console.log(`[AppConfig] Embedding 模型初始化成功，共 ${embeddings.length} 个向量`);
     } catch (err) {
       console.log('[AppConfig] Embedding 模型初始化失败，使用关键词匹配:', (err as Error).message);
       this.extractor = undefined as any; // 标记为失败，不再重试
@@ -452,13 +452,15 @@ export class AppConfigManager {
     
     // 检查是否使用 embedding 匹配
     if (this.embeddingCache && this.embeddingCache.embeddings.length > 0) {
+      console.log('[AppConfig] 使用 embedding 语义搜索');
       matched = await this.embeddingSearch(keywords);
     } else {
       // Fallback: 使用关键词匹配
-      console.log('[AppConfig] 使用关键词匹配...');
+      console.log('[AppConfig] 使用关键词匹配');
       matched = this.keywordSearch([keywords]);
     }
     
+    console.log(`[AppConfig] 匹配到 ${matched.length} 个结果`);
     return JSON.stringify(matched);
   }
 
