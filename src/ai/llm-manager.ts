@@ -55,11 +55,11 @@ export class LLMManager {
     const stage1Result = await this.stage1(naturalLanguageQuery, mainMappingsText, extraSystemPrompt, matchedItemsText);
     console.log('[LLMManager] stage1:', JSON.stringify(stage1Result));
 
-    // 如果没有关键词，直接返回 Stage1 结果，跳过 Stage2
-    if (!stage1Result.keywords || stage1Result.keywords.length === 0) {
-      console.log('[LLMManager] 无关键词，跳过 Stage2');
-      return stage1Result;
-    }
+    // // 如果没有关键词，直接返回 Stage1 结果，跳过 Stage2
+    // if (!stage1Result.keywords || stage1Result.keywords.length === 0) {
+    //   console.log('[LLMManager] 无关键词，跳过 Stage2');
+    //   return stage1Result;
+    // }
 
     // // 第二轮：生成 SQL（暂时注释）
     // const stage2Result = await this.stage2(
