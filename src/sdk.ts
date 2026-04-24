@@ -229,6 +229,7 @@ export class LSMSDK {
       throw new Error('SQL不能为空');
     }
 
+    console.log('[SDK] fullSqlStr:', fullSqlStr);
     const execResult = this.queryExecutor.execute(fullSqlStr, usePage, usePageSize, useMode, aiExtensions);
     
     return {

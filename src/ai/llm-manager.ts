@@ -57,8 +57,8 @@ export class LLMManager {
       return stage1Result;
     }
 
-    // 代码用关键词搜索 items
-    const matchedItemsText = AppConfigManager.get().searchByKeywords(stage1Result.keywords);
+    // 代码用关键词搜索 items（使用 embedding 语义匹配）
+    const matchedItemsText = await AppConfigManager.get().searchByKeywords(stage1Result.keywords);
     console.log('[LLMManager] matched items:\n', matchedItemsText);
 
     // 第二轮：生成 SQL

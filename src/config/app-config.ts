@@ -3,8 +3,26 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
+import { pipeline, FeatureExtractionPipeline } from '@xenova/transformers';
 import { LLMConfig } from '../ai';
 import { LSMConfig, parseConfig, processConfigDefaults, MappingItem } from './index';
+
+/** 向量缓存 */
+interface EmbeddingCache {
+  texts: string[];        // 原始文本列表
+  embeddings: number[][];  // 对应的 embedding 向量
+}
+
+/** 计算余弦相似度 */
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
 
 let instance: AppConfigManager | null = null;
 
@@ -104,6 +122,11 @@ export class AppConfigManager {
   private extensionsSimplifiedText: string | null = null;
   private labelsYamlContent: string | null = null;  // 缓存 labels.yaml 内容
   private sdkConfig: any = null;  // 缓存 lsm-sdk-js.yaml 配置
+  
+  // Embedding 相关
+  private embeddingCache: EmbeddingCache | null = null;
+  private embeddingTexts: string[] = [];  // [mappingId][itemIndex]: "id|value|description"
+  private extractor: FeatureExtractionPipeline | null = null;
 
   private constructor(
     public readonly labelsPath: string,
@@ -314,19 +337,67 @@ export class AppConfigManager {
   }
 
   /**
-   * 用 keywords 搜索 extension mappings（只搜索 extensions）
+   * 初始化 embedding 模型（懒加载，首次搜索时调用）
+   * 如果网络不可用，自动降级到关键词匹配
    */
-  searchByKeywords(keywords: string[]): string {
-    if (!keywords.length) return '';
+  private async initEmbedding(): Promise<void> {
+    if (this.extractor !== undefined) return; // 已初始化（包括失败）
     
-    // 按 mapping 分组
+    try {
+      console.log('[AppConfig] 尝试初始化 embedding 模型...');
+      this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+      
+      // 收集所有 items 的文本
+      this.embeddingTexts = [];
+      const texts: string[] = [];
+      
+      for (const mapping of this.extensions.values()) {
+        if (!mapping.items || mapping.items.length === 0) continue;
+        
+        for (const item of mapping.items) {
+          // 组合 id + value + description 作为检索文本
+          const searchText = `${mapping.id} ${item.value} ${item.description || ''}`.trim();
+          this.embeddingTexts.push(`${mapping.id}|${item.value}|${item.description || ''}`);
+          texts.push(searchText);
+        }
+      }
+      
+      if (texts.length === 0) return;
+      
+      console.log(`[AppConfig] 预计算 ${texts.length} 个 embedding...`);
+      
+      // 批量提取 embedding（截断到 256 token）
+      const embeddings: number[][] = [];
+      const batchSize = 32;
+      
+      for (let i = 0; i < texts.length; i += batchSize) {
+        const batch = texts.slice(i, i + batchSize);
+        const results = await this.extractor(batch, { pooling: 'mean', normalize: true });
+        
+        // 处理结果：可能是 2D Tensor (batch, hidden) 或 3D Tensor (batch, seq, hidden)
+        const resultArray = Array.isArray(results) ? results : Array.from(results as unknown as number[][]);
+        for (let j = 0; j < resultArray.length; j++) {
+          const vec = resultArray[j];
+          embeddings.push(Array.isArray(vec) ? vec : Array.from(vec as unknown as number[]));
+        }
+      }
+      
+      this.embeddingCache = { texts, embeddings };
+      console.log(`[AppConfig] Embedding 缓存就绪`);
+    } catch (err) {
+      console.log('[AppConfig] Embedding 模型初始化失败，使用关键词匹配:', (err as Error).message);
+      this.extractor = undefined as any; // 标记为失败，不再重试
+    }
+  }
+
+  /**
+   * 关键词匹配（fallback 方案）
+   */
+  private keywordSearch(keywords: string[]): Map<string, any[]> {
     const matched: Map<string, any[]> = new Map();
     
     for (const mapping of this.extensions.values()) {
-      // 跳过没有 items 的 mapping
-      if (!mapping.items || mapping.items.length === 0) {
-        continue;
-      }
+      if (!mapping.items || mapping.items.length === 0) continue;
       
       const matchedItems: any[] = [];
       
@@ -339,7 +410,6 @@ export class AppConfigManager {
         if (matchedKeyword) {
           matchedItems.push({
             value: item.value,
-            condition: item.condition,
             description: item.description
           });
         }
@@ -350,19 +420,99 @@ export class AppConfigManager {
       }
     }
     
-    // 格式化为文本
+    return matched;
+  }
+
+  /**
+   * 用 keywords 搜索 extension mappings（embedding 语义匹配 + 关键词匹配）
+   */
+  async searchByKeywords(keywords: string[]): Promise<string> {
+    if (!keywords.length) return '';
+    
+    // 确保 embedding 已初始化
+    await this.initEmbedding();
+    
+    // 检查是否使用 embedding 匹配
+    if (this.embeddingCache && this.embeddingCache.embeddings.length > 0) {
+      return this.embeddingSearch(keywords);
+    }
+    
+    // Fallback: 使用关键词匹配
+    console.log('[AppConfig] 使用关键词匹配...');
+    const matched = this.keywordSearch(keywords);
+    return this.formatSearchResult(matched);
+  }
+
+  /**
+   * Embedding 语义搜索
+   */
+  private async embeddingSearch(keywords: string[]): Promise<string> {
+    if (!this.extractor || !this.embeddingCache || this.embeddingCache.embeddings.length === 0) {
+      return '';
+    }
+    
+    // 1. 计算关键词的 embedding
+    const queryText = keywords.join(' ');
+    const queryEmbedding = await this.extractor(queryText, { pooling: 'mean', normalize: true });
+    const queryVec: number[] = Array.isArray(queryEmbedding) 
+      ? queryEmbedding 
+      : Array.from(queryEmbedding as unknown as number[]);
+    
+    // 2. 计算所有 items 与关键词的相似度
+    const scores: { index: number; score: number; text: string }[] = [];
+    
+    for (let i = 0; i < this.embeddingCache.embeddings.length; i++) {
+      const sim = cosineSimilarity(queryVec, this.embeddingCache.embeddings[i]);
+      if (sim > 0.3) {  // 相似度阈值
+        scores.push({
+          index: i,
+          score: sim,
+          text: this.embeddingTexts[i]
+        });
+      }
+    }
+    
+    // 3. 排序并取 top 10
+    scores.sort((a, b) => b.score - a.score);
+    const topScores = scores.slice(0, 10);
+    
+    // 4. 按 mapping 分组
+    const matched: Map<string, any[]> = new Map();
+    
+    for (const { text } of topScores) {
+      const parts = text.split('|');
+      const mappingId = parts[0];
+      const value = parts[1];
+      const description = parts[2];
+      
+      if (!matched.has(mappingId)) {
+        matched.set(mappingId, []);
+      }
+      
+      const items = matched.get(mappingId)!;
+      // 避免重复
+      if (!items.find(i => i.value === value)) {
+        items.push({ value, description });
+      }
+    }
+    
+    return this.formatSearchResult(matched);
+  }
+
+  /**
+   * 格式化搜索结果
+   */
+  private formatSearchResult(matched: Map<string, any[]>): string {
     const lines: string[] = [];
     for (const [id, items] of matched) {
       lines.push(`${id}:`);
       for (const item of items) {
         lines.push(`  - value: ${item.value}`);
-        lines.push(`    condition: ${item.condition}`);
         if (item.description && item.description !== '无') {
           lines.push(`    description: ${item.description}`);
         }
       }
     }
-    
     return lines.join('\n');
   }
 

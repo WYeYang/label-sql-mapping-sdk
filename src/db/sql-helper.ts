@@ -7,13 +7,18 @@ import type { ExtensionMapping, MappingItem } from '../config';
  * 从完整SQL中提取WHERE及后面的所有内容（含ORDER BY/LIMIT/OFFSET）
  */
 export function extractWhereAndAfter(sql: string): string {
-  // 如果没有 WHERE，直接返回原 SQL（保留 LIMIT 和 ORDER BY）
-  if (!/\bWHERE\b/i.test(sql)) {
-    return sql;
+  // 如果有 WHERE，提取 WHERE 及其后面的所有内容（包括 LIMIT 和 ORDER BY）
+  if (/\bWHERE\b/i.test(sql)) {
+    const match = sql.match(/\bWHERE\b\s+(.+)$/is);
+    return match ? match[0].trim() : '';
   }
-  // 提取 WHERE 及其后面的所有内容（包括 LIMIT 和 ORDER BY）
-  const match = sql.match(/\bWHERE\b\s+(.+)$/is);
-  return match ? match[0].trim() : sql;
+  // 如果没有 WHERE，提取 LIMIT 和 ORDER BY（如果有的话）
+  const limitMatch = sql.match(/\bLIMIT\s+\d+\b/i);
+  const orderMatch = sql.match(/\bORDER\s+BY\b.+$/i);
+  const parts: string[] = [];
+  if (limitMatch) parts.push(limitMatch[0]);
+  if (orderMatch) parts.push(orderMatch[0]);
+  return parts.join(' ');
 }
 
 /** 判断SQL是否包含LIMIT */
