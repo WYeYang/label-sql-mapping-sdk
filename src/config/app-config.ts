@@ -9,17 +9,9 @@ import { LSMConfig, parseConfig, processConfigDefaults, MappingItem } from './in
 
 /** 向量缓存 */
 interface EmbeddingCache {
-  texts: string[];        // 原始文本列表
-  embeddings: number[][];  // 对应的 embedding 向量
-}
-
-/** 搜索结果项 */
-export interface SearchResultItem {
-  id: string;
-  name?: string;
-  value: string;
-  description?: string;
-  condition?: string;
+  texts: string[];              // 用于生成 embedding 的文本
+  items: (MappingItem & { id: string; name?: string })[];  // 对应的完整 item
+  embeddings: number[][];       // embedding 向量
 }
 
 /** 计算余弦相似度 */
@@ -134,7 +126,6 @@ export class AppConfigManager {
   
   // Embedding 相关
   private embeddingCache: EmbeddingCache | null = null;
-  private embeddingItems: SearchResultItem[] = [];  // 存储完整 item 信息
   private extractor: FeatureExtractionPipeline | null = null;
 
   private constructor(
@@ -357,8 +348,8 @@ export class AppConfigManager {
       this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
       
       // 收集所有 items 的文本
-      this.embeddingItems = [];
       const texts: string[] = [];
+      const items: (MappingItem & { id: string; name?: string })[] = [];
       
       for (const mapping of this.extensions.values()) {
         if (!mapping.items || mapping.items.length === 0) continue;
@@ -366,12 +357,10 @@ export class AppConfigManager {
         for (const item of mapping.items) {
           // 组合 id + value + description 作为检索文本
           const searchText = `${mapping.id} ${item.value} ${item.description || ''}`.trim();
-          this.embeddingItems.push({
+          items.push({
             id: mapping.id,
             name: mapping.name,
-            value: item.value,
-            description: item.description,
-            condition: item.condition
+            ...item
           });
           texts.push(searchText);
         }
@@ -397,7 +386,7 @@ export class AppConfigManager {
         }
       }
       
-      this.embeddingCache = { texts, embeddings };
+      this.embeddingCache = { texts, items, embeddings };
       console.log(`[AppConfig] Embedding 模型初始化成功，共 ${embeddings.length} 个向量`);
     } catch (err) {
       console.log('[AppConfig] Embedding 模型初始化失败，使用关键词匹配:', (err as Error).message);
@@ -408,8 +397,8 @@ export class AppConfigManager {
   /**
    * 关键词匹配（fallback 方案）
    */
-  private keywordSearch(keywords: string[]): SearchResultItem[] {
-    const matched: SearchResultItem[] = [];
+  private keywordSearch(keywords: string[]): (MappingItem & { id: string; name?: string })[] {
+    const matched: (MappingItem & { id: string; name?: string })[] = [];
     const valueSet = new Set<string>();  // 去重
     
     for (const mapping of this.extensions.values()) {
@@ -448,7 +437,7 @@ export class AppConfigManager {
     // 确保 embedding 已初始化
     await this.initEmbedding();
     
-    let matched: SearchResultItem[];
+    let matched: (MappingItem & { id: string; name?: string })[];
     
     // 检查当前状态
     const useEmbedding = this.embeddingCache && this.embeddingCache.embeddings.length > 0;
@@ -468,7 +457,7 @@ export class AppConfigManager {
   /**
    * Embedding 语义搜索
    */
-  private async embeddingSearch(keywords: string): Promise<SearchResultItem[]> {
+  private async embeddingSearch(keywords: string): Promise<(MappingItem & { id: string; name?: string })[]> {
     if (!this.extractor || !this.embeddingCache || this.embeddingCache.embeddings.length === 0) {
       return [];
     }
@@ -494,11 +483,11 @@ export class AppConfigManager {
     const topScores = scores.slice(0, 10);
     
     // 4. 获取对应的 item 信息
-    const matched: SearchResultItem[] = [];
+    const matched: (MappingItem & { id: string; name?: string })[] = [];
     const valueSet = new Set<string>();
     
     for (const { index } of topScores) {
-      const item = this.embeddingItems[index];
+      const item = this.embeddingCache.items[index];
       if (item && !valueSet.has(item.value)) {
         matched.push(item);
         valueSet.add(item.value);
