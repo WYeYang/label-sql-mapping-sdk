@@ -450,12 +450,13 @@ export class AppConfigManager {
     
     let matched: SearchResultItem[];
     
-    // 检查是否使用 embedding 匹配
-    if (this.embeddingCache && this.embeddingCache.embeddings.length > 0) {
+    // 检查当前状态
+    const useEmbedding = this.embeddingCache && this.embeddingCache.embeddings.length > 0;
+    
+    if (useEmbedding) {
       console.log('[AppConfig] 使用 embedding 语义搜索');
       matched = await this.embeddingSearch(keywords);
     } else {
-      // Fallback: 使用关键词匹配
       console.log('[AppConfig] 使用关键词匹配');
       matched = this.keywordSearch([keywords]);
     }
