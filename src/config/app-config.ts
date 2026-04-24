@@ -397,7 +397,7 @@ export class AppConfigManager {
   /**
    * 关键词匹配（fallback 方案）
    */
-  private keywordSearch(keywords: string[]): any[] {
+  private keywordSearch(keywords: string): string {
     const matched: any[] = [];
     const valueSet = new Set<string>();  // 去重
     
@@ -405,19 +405,17 @@ export class AppConfigManager {
       if (!mapping.items || mapping.items.length === 0) continue;
       
       for (const item of mapping.items) {
-        const kwLower = keywords.map(k => k.toLowerCase());
-        const matchedKeyword = kwLower.find(kw => 
-          item.value.toLowerCase().includes(kw) ||
-          item.description?.toLowerCase().includes(kw)
-        );
-        if (matchedKeyword && !valueSet.has(item.value)) {
-          matched.push({ id: mapping.id, name: mapping.name, ...item });
-          valueSet.add(item.value);
+        if (item.value.toLowerCase().includes(keywords) ||
+            item.description?.toLowerCase().includes(keywords)) {
+          if (!valueSet.has(item.value)) {
+            matched.push({ id: mapping.id, name: mapping.name, ...item });
+            valueSet.add(item.value);
+          }
         }
       }
     }
     
-    return matched;
+    return JSON.stringify(matched);
   }
 
   /**
@@ -436,16 +434,19 @@ export class AppConfigManager {
     // 检查当前状态
     const useEmbedding = this.embeddingCache && this.embeddingCache.embeddings.length > 0;
     
+    let result: string;
+    
     if (useEmbedding) {
       console.log('[AppConfig] 使用 embedding 语义搜索');
-      matched = await this.embeddingSearch(keywords);
+      const matched = await this.embeddingSearch(keywords);
+      console.log(`[AppConfig] 匹配到 ${matched.length} 个结果`);
+      result = JSON.stringify(matched);
     } else {
       console.log('[AppConfig] 使用关键词匹配');
-      matched = this.keywordSearch([keywords]);
+      result = this.keywordSearch(keywords);
     }
     
-    console.log(`[AppConfig] 匹配到 ${matched.length} 个结果`);
-    return JSON.stringify(matched);
+    return result;
   }
 
   /**
