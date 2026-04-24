@@ -99,7 +99,7 @@ export class LLMManager {
 
 ## 数据库字段和查询方法说明:
 ${mainMappingsText}
-${matchedItemsText ? `\n## 根据用户输入搜索到的相关选项（可能包含用户想要的答案）:\n${matchedItemsText}\n` : ''}
+${matchedItemsText ? `\n## 根据用户输入语义搜索到的相关映射选项（用于生成 SQL 的参考）:\n${matchedItemsText}\n` : ''}
 ## 额外说明:
 ${extraSystemPrompt}
 
