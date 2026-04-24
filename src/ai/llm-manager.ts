@@ -21,13 +21,11 @@ export interface Stage1Result {
   order?: string;
   /** explanation */
   explanation?: string;
-  /** 能直接确定的 id-values 绑定（留空） */
   extensions: {
     id: string;
     values: string[];
   }[];
   /** 无法匹配、需交给Stage2处理的关键词 */
-  keywords: string[];
   /** 额外输出字段（根据用户systemPrompt要求） */
   extra?: any;
 }
@@ -95,7 +93,6 @@ export class LLMManager {
 ## 重要规则
 - 如果无法分析出有效的 WHERE 条件，请返回空的 WHERE 条件字符串 ""
 - 如果用户要求随机取N条数据（如"随便抽一张"、"随机选几张"），需要同时生成对应的 ORDER BY RANDOM() 和 LIMIT N 条件
-- **重要**：如果根据某个关键词生成了 WHERE 条件，这个关键词就不要放到 keywords 中了
 
 ## 数据库字段和查询方法说明:
 ${mainMappingsText}
@@ -115,8 +112,6 @@ ${extraSystemPrompt}
   "order": ...,
   ##查询说明对生成的where解释
   "explanation": ...,
-  ##生成查询不到where条件,需要下一步确认的关键词（注意：已在where中使用的关键词不要再放到这里）
-  "keywords": [...],
   ##额外输出字段（根据额外说明生成）
   "extra": ...
 }`;
@@ -175,7 +170,6 @@ ${matchedItemsText}
 ${extraSystemPrompt}
 
 ## 重要规则
-- **重要**：如果根据某个关键词生成了 WHERE 条件，这个关键词就不要放到 extensions 中了
 
 ## 输出格式(JSON)
 {
