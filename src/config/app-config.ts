@@ -341,7 +341,7 @@ export class AppConfigManager {
    * 如果网络不可用，自动降级到关键词匹配
    */
   private async initEmbedding(): Promise<void> {
-    if (this.extractor !== undefined) return; // 已初始化（包括失败）
+    if (this.embeddingCache !== null) return; // 已初始化（包括成功和失败）
     
     try {
       console.log('[AppConfig] 开始初始化 embedding 模型 (all-MiniLM-L6-v2)...');
@@ -390,7 +390,7 @@ export class AppConfigManager {
       console.log(`[AppConfig] Embedding 模型初始化成功，共 ${embeddings.length} 个向量`);
     } catch (err) {
       console.log('[AppConfig] Embedding 模型初始化失败，使用关键词匹配:', (err as Error).message);
-      this.extractor = undefined as any; // 标记为失败，不再重试
+      this.embeddingCache = {} as any; // 标记为失败，不再重试
     }
   }
 
@@ -400,17 +400,30 @@ export class AppConfigManager {
   private keywordSearch(keywords: string): string {
     const matched: any[] = [];
     const valueSet = new Set<string>();  // 去重
+    const kwLower = keywords.toLowerCase();
+    
+    // 生成所有可能的 token（2-5字符）
+    const tokens: string[] = [];
+    for (let len = Math.min(5, kwLower.length); len >= 2; len--) {
+      for (let i = 0; i <= kwLower.length - len; i++) {
+        tokens.push(kwLower.substring(i, i + len));
+      }
+    }
+    
+    console.log(`[AppConfig] 搜索 tokens: ${tokens.slice(0, 10).join(', ')}${tokens.length > 10 ? '...' : ''}`);
     
     for (const mapping of this.extensions.values()) {
       if (!mapping.items || mapping.items.length === 0) continue;
       
       for (const item of mapping.items) {
-        if (item.value.toLowerCase().includes(keywords) ||
-            item.description?.toLowerCase().includes(keywords)) {
-          if (!valueSet.has(item.value)) {
-            matched.push({ id: mapping.id, name: mapping.name, ...item });
-            valueSet.add(item.value);
-          }
+        const valueLower = item.value.toLowerCase();
+        const descLower = item.description?.toLowerCase() || '';
+        const isMatched = tokens.some(token => 
+          valueLower.includes(token) || descLower.includes(token)
+        );
+        if (isMatched && !valueSet.has(item.value)) {
+          matched.push({ id: mapping.id, name: mapping.name, ...item });
+          valueSet.add(item.value);
         }
       }
     }
@@ -432,7 +445,7 @@ export class AppConfigManager {
     let matched: any[];
     
     // 检查当前状态
-    const useEmbedding = this.embeddingCache && this.embeddingCache.embeddings.length > 0;
+    const useEmbedding = this.embeddingCache && this.embeddingCache.embeddings?.length > 0;
     
     let result: string;
     
@@ -453,7 +466,7 @@ export class AppConfigManager {
    * Embedding 语义搜索
    */
   private async embeddingSearch(keywords: string): Promise<any[]> {
-    if (!this.extractor || !this.embeddingCache || this.embeddingCache.embeddings.length === 0) {
+    if (!this.extractor || !this.embeddingCache?.embeddings?.length) {
       return [];
     }
     
@@ -466,8 +479,8 @@ export class AppConfigManager {
     // 2. 计算所有 items 与关键词的相似度
     const scores: { index: number; score: number }[] = [];
     
-    for (let i = 0; i < this.embeddingCache.embeddings.length; i++) {
-      const sim = cosineSimilarity(queryVec, this.embeddingCache.embeddings[i]);
+    for (let i = 0; i < this.embeddingCache.embeddings!.length; i++) {
+      const sim = cosineSimilarity(queryVec, this.embeddingCache.embeddings![i]);
       if (sim > 0.3) {  // 相似度阈值
         scores.push({ index: i, score: sim });
       }
