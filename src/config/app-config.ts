@@ -411,13 +411,7 @@ export class AppConfigManager {
           item.description?.toLowerCase().includes(kw)
         );
         if (matchedKeyword && !valueSet.has(item.value)) {
-          matched.push({
-            id: mapping.id,
-            name: mapping.name,
-            value: item.value,
-            description: item.description,
-            condition: item.condition
-          });
+          matched.push({ id: mapping.id, name: mapping.name, ...item });
           valueSet.add(item.value);
         }
       }
