@@ -10,7 +10,7 @@ import { LSMConfig, parseConfig, processConfigDefaults, MappingItem } from './in
 /** 向量缓存 */
 interface EmbeddingCache {
   texts: string[];              // 用于生成 embedding 的文本
-  items: (MappingItem & { id: string; name?: string })[];  // 对应的完整 item
+  items: any[];  // 对应的完整 item
   embeddings: number[][];       // embedding 向量
 }
 
@@ -349,7 +349,7 @@ export class AppConfigManager {
       
       // 收集所有 items 的文本
       const texts: string[] = [];
-      const items: (MappingItem & { id: string; name?: string })[] = [];
+      const items: any[] = [];
       
       for (const mapping of this.extensions.values()) {
         if (!mapping.items || mapping.items.length === 0) continue;
@@ -397,8 +397,8 @@ export class AppConfigManager {
   /**
    * 关键词匹配（fallback 方案）
    */
-  private keywordSearch(keywords: string[]): (MappingItem & { id: string; name?: string })[] {
-    const matched: (MappingItem & { id: string; name?: string })[] = [];
+  private keywordSearch(keywords: string[]): any[] {
+    const matched: any[] = [];
     const valueSet = new Set<string>();  // 去重
     
     for (const mapping of this.extensions.values()) {
@@ -431,7 +431,7 @@ export class AppConfigManager {
     // 确保 embedding 已初始化
     await this.initEmbedding();
     
-    let matched: (MappingItem & { id: string; name?: string })[];
+    let matched: any[];
     
     // 检查当前状态
     const useEmbedding = this.embeddingCache && this.embeddingCache.embeddings.length > 0;
@@ -451,7 +451,7 @@ export class AppConfigManager {
   /**
    * Embedding 语义搜索
    */
-  private async embeddingSearch(keywords: string): Promise<(MappingItem & { id: string; name?: string })[]> {
+  private async embeddingSearch(keywords: string): Promise<any[]> {
     if (!this.extractor || !this.embeddingCache || this.embeddingCache.embeddings.length === 0) {
       return [];
     }
@@ -477,7 +477,7 @@ export class AppConfigManager {
     const topScores = scores.slice(0, 10);
     
     // 4. 获取对应的 item 信息
-    const matched: (MappingItem & { id: string; name?: string })[] = [];
+    const matched: any[] = [];
     const valueSet = new Set<string>();
     
     for (const { index } of topScores) {
