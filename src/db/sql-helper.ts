@@ -118,6 +118,7 @@ function buildSelectClause(mainAlias: string, mappings: LSMConfig['mappings']): 
 export class SqlHelper {
   private static _instance: SqlHelper | null = null;
   readonly fromClause: string;
+  readonly mainAlias: string;
   readonly labelSelectClause: string;
   private _extensions: ExtensionMapping[] = [];
   private extIds: Set<string> = new Set();
@@ -125,9 +126,10 @@ export class SqlHelper {
   private constructor(config: LSMConfig) {
     const tables = config.database.tables;
     if (!tables?.length) throw new Error('缺少数据表配置');
+    this.mainAlias = tables[0].alias || tables[0].name;
     this.fromClause = buildFromClause(tables);
     this.labelSelectClause = buildSelectClause(
-      tables[0].alias || tables[0].name,
+      this.mainAlias,
       config.mappings
     );
   }
@@ -205,7 +207,7 @@ export class SqlHelper {
    * 构建基础 SQL（SELECT FROM）
    */
   buildBaseSql(): string {
-    return `SELECT ${this.fromClause}`;
+    return `SELECT ${this.mainAlias}.* FROM ${this.fromClause}`;
   }
 
   /**
