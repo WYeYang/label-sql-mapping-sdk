@@ -225,17 +225,22 @@ export class SqlHelper {
   }
 
   /**
-   * 构建基础 SQL（SELECT FROM）
+   * 构建基础 SELECT 部分
+   * @param isDetailMode 是否为详情模式，详情模式使用 labelSelectClause，否则使用 d.*
    */
-  buildBaseSql(): string {
+  buildBaseSql(isDetailMode: boolean = false): string {
+    if (isDetailMode) {
+      return `SELECT ${this.labelSelectClause} FROM ${this.fromClause}`;
+    }
     return `SELECT ${this.mainAlias}.* FROM ${this.fromClause}`;
   }
 
   /**
    * 从 parseResult 构建初始 SQL
+   * @param isDetailMode 是否为详情模式
    */
-  buildInitialSql(parseResult: any): string {
-    let sql = this.buildBaseSql();
+  buildInitialSql(parseResult: any, isDetailMode: boolean = false): string {
+    let sql = this.buildBaseSql(isDetailMode);
     if (parseResult.where) {
       const where = parseResult.where.trim();
       sql = where.toUpperCase().startsWith('WHERE ') 
