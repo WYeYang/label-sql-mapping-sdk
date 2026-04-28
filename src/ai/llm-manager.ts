@@ -91,6 +91,8 @@ export class LLMManager {
 分析用户的消息
 
 ## 重要规则
+- **优先使用 labels.yaml 中的映射**：当用户提到"属性"、"种族"、"等级"等关键词时，**优先匹配 labels.yaml 中的映射**，如"暗属性"应匹配 labels.yaml 中的"暗"，而非 effect_type 中的"属性相关"
+- 当需要匹配具体效果类型（如"破坏"、"除外"、"特殊召唤"等）时，才使用 extensions 中的映射
 - 如果无法分析出有效的 WHERE 条件，请返回空的 WHERE 条件字符串 ""
 - 如果用户要求随机取N条数据（如"随便抽一张"、"随机选几张"），需要同时生成对应的 ORDER BY RANDOM() 和 LIMIT N 条件
 
