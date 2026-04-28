@@ -13,11 +13,32 @@ export function extractWhereAndAfter(sql: string): string {
     return match ? match[0].trim() : '';
   }
   // 如果没有 WHERE，提取 LIMIT 和 ORDER BY（如果有的话）
-  const limitMatch = sql.match(/\bLIMIT\s+\d+\b/i);
-  const orderMatch = sql.match(/\bORDER\s+BY\b.+$/i);
+  // 注意：ORDER BY 可能包含 RANDOM() 等复杂表达式，且 RANDOM() 可能紧跟在 LIMIT 后面
+  // 所以需要分别提取，避免重复
+  let orderPart = '';
+  let limitPart = '';
+  
+  // 提取 ORDER BY（匹配到 LIMIT 之前或行尾）
+  const orderMatch = sql.match(/\bORDER\s+BY\b.*?(?=\bLIMIT\b|$)/is);
+  if (orderMatch) {
+    orderPart = orderMatch[0].trim();
+    // 如果提取的包含 LIMIT，去掉 LIMIT 部分
+    const limitIdx = orderPart.toUpperCase().lastIndexOf('LIMIT');
+    if (limitIdx > 0) {
+      limitPart = orderPart.substring(limitIdx);
+      orderPart = orderPart.substring(0, limitIdx).trim();
+    }
+  }
+  
+  // 如果 ORDER BY 没有包含 LIMIT，再单独提取
+  if (!limitPart) {
+    const limitMatch = sql.match(/\bLIMIT\s+\d+\b/i);
+    if (limitMatch) limitPart = limitMatch[0];
+  }
+  
   const parts: string[] = [];
-  if (orderMatch) parts.push(orderMatch[0]);
-  if (limitMatch) parts.push(limitMatch[0]);
+  if (orderPart) parts.push(orderPart);
+  if (limitPart) parts.push(limitPart);
   return parts.join(' ');
 }
 
