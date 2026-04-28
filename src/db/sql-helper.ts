@@ -16,8 +16,8 @@ export function extractWhereAndAfter(sql: string): string {
   const limitMatch = sql.match(/\bLIMIT\s+\d+\b/i);
   const orderMatch = sql.match(/\bORDER\s+BY\b.+$/i);
   const parts: string[] = [];
-  if (limitMatch) parts.push(limitMatch[0]);
   if (orderMatch) parts.push(orderMatch[0]);
+  if (limitMatch) parts.push(limitMatch[0]);
   return parts.join(' ');
 }
 
@@ -219,8 +219,8 @@ export class SqlHelper {
         ? `${sql} ${where}`
         : `${sql} WHERE ${where}`;
     }
-    if (parseResult.limit) sql += ` LIMIT ${parseResult.limit}`;
     if (parseResult.order) sql += ` ORDER BY ${parseResult.order}`;
+    if (parseResult.limit) sql += ` LIMIT ${parseResult.limit}`;
     return sql;
   }
 
