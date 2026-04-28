@@ -77,14 +77,13 @@ export class QueryExecutor {
       extensionsResult = aiExtensions;
     }
 
-    // 构建 SQL
-    const extSelect = extMappings.length ? this.sqlHelper.buildExtensionSelect(extMappings) : '';
+    // 构建 SQL：list 和 detail 都使用 labelSelectClause，detail 额外包含 extensions
     const mainSelect = this.sqlHelper.labelSelectClause;
+    const extSelect = mode === 'detail' && extMappings.length ? this.sqlHelper.buildExtensionSelect(extMappings) : '';
+    const selectClause = extSelect ? `${mainSelect}, ${extSelect}` : mainSelect;
     const fromClause = this.sqlHelper.fromClause;
 
-    const baseSql = extSelect
-      ? `SELECT ${mainSelect}, ${extSelect} FROM ${fromClause} ${whereAndAfter}`
-      : `SELECT ${mainSelect} FROM ${fromClause} ${whereAndAfter}`;
+    const baseSql = `SELECT ${selectClause} FROM ${fromClause} ${whereAndAfter}`;
 
     const offset = (page - 1) * pageSize;
     const querySql = hasLimit(normalizedSql) ? baseSql : `${baseSql} LIMIT ${pageSize} OFFSET ${offset}`;
