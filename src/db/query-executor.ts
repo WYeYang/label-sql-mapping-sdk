@@ -87,7 +87,6 @@ export class QueryExecutor {
 
     const offset = (page - 1) * pageSize;
     const querySql = hasLimit(normalizedSql) ? baseSql : `${baseSql} LIMIT ${pageSize} OFFSET ${offset}`;
-    console.log(`[QueryExecutor] 执行 SQL: ${querySql}`);
 
     const queryResult: DBQueryResult = this.database.query(querySql);
 
