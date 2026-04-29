@@ -3,27 +3,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
-import { pipeline, FeatureExtractionPipeline } from '@xenova/transformers';
 import { LLMConfig } from '../ai';
 import { LSMConfig, parseConfig, processConfigDefaults, MappingItem } from './index';
-
-/** 向量缓存 */
-interface EmbeddingCache {
-  texts: string[];              // 用于生成 embedding 的文本
-  items: any[];  // 对应的完整 item
-  embeddings: number[][];       // embedding 向量
-}
-
-/** 计算余弦相似度 */
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
 let instance: AppConfigManager | null = null;
 
@@ -123,10 +104,6 @@ export class AppConfigManager {
   private extensionsSimplifiedText: string | null = null;
   private labelsYamlContent: string | null = null;  // 缓存 labels.yaml 内容
   private sdkConfig: any = null;  // 缓存 lsm-sdk-js.yaml 配置
-  
-  // Embedding 相关
-  private embeddingCache: EmbeddingCache | null = null;
-  private extractor: FeatureExtractionPipeline | null = null;
 
   private constructor(
     public readonly labelsPath: string,
@@ -337,65 +314,7 @@ export class AppConfigManager {
   }
 
   /**
-   * 初始化 embedding 模型（懒加载，首次搜索时调用）
-   * 如果网络不可用，自动降级到关键词匹配
-   */
-  private async initEmbedding(): Promise<void> {
-    if (this.embeddingCache !== null) return; // 已初始化（包括成功和失败）
-    
-    try {
-      console.log('[AppConfig] 开始初始化 embedding 模型 (all-MiniLM-L6-v2)...');
-      this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-      
-      // 收集所有 items 的文本
-      const texts: string[] = [];
-      const items: any[] = [];
-      
-      for (const mapping of this.extensions.values()) {
-        if (!mapping.items || mapping.items.length === 0) continue;
-        
-        for (const item of mapping.items) {
-          // 组合 id + value + description 作为检索文本
-          const searchText = `${mapping.id} ${item.value} ${item.description || ''}`.trim();
-          items.push({
-            id: mapping.id,
-            name: mapping.name,
-            ...item
-          });
-          texts.push(searchText);
-        }
-      }
-      
-      if (texts.length === 0) return;
-      
-      console.log(`[AppConfig] 预计算 ${texts.length} 个 embedding...`);
-      
-      // 批量提取 embedding（截断到 256 token）
-      const embeddings: number[][] = [];
-      const batchSize = 32;
-      
-      for (let i = 0; i < texts.length; i += batchSize) {
-        const batch = texts.slice(i, i + batchSize);
-        const results = await this.extractor(batch, { pooling: 'mean', normalize: true });
-        
-        // 处理结果：可能是 2D Tensor (batch, hidden) 或 3D Tensor (batch, seq, hidden)
-        const resultArray = Array.isArray(results) ? results : Array.from(results as unknown as number[][]);
-        for (let j = 0; j < resultArray.length; j++) {
-          const vec = resultArray[j];
-          embeddings.push(Array.isArray(vec) ? vec : Array.from(vec as unknown as number[]));
-        }
-      }
-      
-      this.embeddingCache = { texts, items, embeddings };
-      console.log(`[AppConfig] Embedding 模型初始化成功，共 ${embeddings.length} 个向量`);
-    } catch (err) {
-      console.log('[AppConfig] Embedding 模型初始化失败，使用关键词匹配:', (err as Error).message);
-      this.embeddingCache = {} as any; // 标记为失败，不再重试
-    }
-  }
-
-  /**
-   * 关键词匹配（fallback 方案）
+   * 关键词匹配
    */
   private keywordSearch(keywords: string): string {
     const matchedMap = new Map<string, any>();  // key: mapping.id
@@ -443,92 +362,15 @@ export class AppConfigManager {
   }
 
   /**
-   * 用 keywords 搜索 extension mappings（embedding 语义匹配 + 关键词匹配）
+   * 用 keywords 搜索 extension mappings（仅关键词匹配）
    * @param keywords 用户输入的关键词（字符串）
    * @returns JSON 格式的匹配 item 列表
    */
   async searchByKeywords(keywords: string): Promise<string> {
     if (!keywords || !keywords.trim()) return '[]';
     
-    // 确保 embedding 已初始化
-    await this.initEmbedding();
-    
-    let matched: any[];
-    
-    // 检查当前状态
-    const useEmbedding = this.embeddingCache && this.embeddingCache.embeddings?.length > 0;
-    
-    let result: string;
-    
-    if (useEmbedding) {
-      console.log('[AppConfig] 使用 embedding 语义搜索');
-      const matched = await this.embeddingSearch(keywords);
-      console.log(`[AppConfig] 匹配到 ${matched.length} 个结果`);
-      result = JSON.stringify(matched);
-    } else {
-      console.log('[AppConfig] 使用关键词匹配');
-      result = this.keywordSearch(keywords);
-    }
-    
-    return result;
-  }
-
-  /**
-   * Embedding 语义搜索
-   */
-  private async embeddingSearch(keywords: string): Promise<any[]> {
-    if (!this.extractor || !this.embeddingCache?.embeddings?.length) {
-      return [];
-    }
-    
-    // 1. 计算关键词的 embedding
-    const queryEmbedding = await this.extractor(keywords, { pooling: 'mean', normalize: true });
-    const queryVec: number[] = Array.isArray(queryEmbedding) 
-      ? queryEmbedding 
-      : Array.from(queryEmbedding as unknown as number[]);
-    
-    // 2. 计算所有 items 与关键词的相似度
-    const scores: { index: number; score: number }[] = [];
-    
-    for (let i = 0; i < this.embeddingCache.embeddings!.length; i++) {
-      const sim = cosineSimilarity(queryVec, this.embeddingCache.embeddings![i]);
-      if (sim > 0.3) {  // 相似度阈值
-        scores.push({ index: i, score: sim });
-      }
-    }
-    
-    // 3. 排序并取 top 10
-    scores.sort((a, b) => b.score - a.score);
-    const topScores = scores.slice(0, 10);
-    
-    // 4. 按 mapping.id 分组
-    const matchedMap = new Map<string, any>();
-    const valueSet = new Set<string>();
-    
-    for (const { index } of topScores) {
-      const item = this.embeddingCache.items[index];
-      if (!item || valueSet.has(item.value)) continue;
-      
-      const mappingId = item.id;
-      const mapping = this.allMappings.find(m => m.id === mappingId);
-      if (!mapping) continue;
-      
-      if (!matchedMap.has(mappingId)) {
-        matchedMap.set(mappingId, {
-          id: mapping.id,
-          name: mapping.name,
-          description: mapping.description,
-          items: []
-        });
-      }
-      
-      // 去掉 item 里的 id 和 name，只保留 item 自己的字段
-      const { id, name, ...itemWithoutId } = item;
-      matchedMap.get(mappingId)!.items.push(itemWithoutId);
-      valueSet.add(item.value);
-    }
-    
-    return Array.from(matchedMap.values());
+    console.log('[AppConfig] 使用关键词匹配');
+    return this.keywordSearch(keywords);
   }
 
   /**
