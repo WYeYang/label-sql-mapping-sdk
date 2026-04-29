@@ -415,7 +415,7 @@ export class AppConfigManager {
       }
     }
     
-    const result = Array.from(matchedMap.values());
+    const result = Array.from(matchedMap.values()).map(({ id, name, items }) => [id, name, items]);
     console.log(`[AppConfig] 总匹配配置数: ${result.length}`);
     
     return JSON.stringify(result);
