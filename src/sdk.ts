@@ -210,11 +210,11 @@ export class LSMSDK {
       }
       
       aiExtensions.push(...(parseResult.extensions ?? []));
-      fullSqlStr = this.sqlHelper.buildInitialSql(parseResult, isDetailMode);
+      fullSqlStr = this.sqlHelper.buildInitialSql(parseResult, false);
     } else if (sql) {
       fullSqlStr = sql;
     } else if (aiExtensions.length > 0) {
-      fullSqlStr = this.sqlHelper.buildBaseSql(isDetailMode);
+      fullSqlStr = this.sqlHelper.buildBaseSql(false);
     } else {
       throw new Error('请提供 query 或 sql 或 extensions 参数');
     }

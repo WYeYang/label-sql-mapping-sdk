@@ -1,7 +1,7 @@
 // 查询执行器
 
 import { Database, DBQueryResult } from '../db';
-import { SqlHelper, extractWhereAndAfter, hasLimit, replaceLimit } from './sql-helper';
+import { SqlHelper, extractWhereAndAfter, hasLimit, replaceLimit, extractLimit } from './sql-helper';
 import type { ExtensionMapping } from '../config';
 import { QueryResult } from './types';
 import type { ExtensionInfo } from '../ai/extension-merger';
@@ -57,14 +57,20 @@ export class QueryExecutor {
    * 执行查询
    */
   execute(fullSqlStr: string, page: number, pageSize: number, mode: QueryMode = 'list', aiExtensions?: ExtensionInfo[]): QueryExecResult {
-    // AI 返回的 LIMIT 如果大于 pageSize，替换成 pageSize
-    const normalizedSql = replaceLimit(fullSqlStr, pageSize);
-    const whereAndAfter = extractWhereAndAfter(normalizedSql);
+    // 提取原始 LIMIT 值（用于确定总数上限）
+    const originalLimit = extractLimit(fullSqlStr);
+    
+    // 去掉 SQL 中的 LIMIT，用于构建 countSql 和 querySql
+    const sqlWithoutLimit = fullSqlStr.replace(/\bLIMIT\s+\d+/i, '').trim();
+    const whereAndAfter = extractWhereAndAfter(sqlWithoutLimit);
 
-    // 第一次 SQL：count
+    // 第一次 SQL：count，获取总数
     const countSql = this.sqlHelper.buildCountSql(whereAndAfter);
     const countResult: DBQueryResult = this.database.query(countSql);
-    const total = countResult.rows[0]?.total || 0;
+    const rawTotal = countResult.rows[0]?.total || 0;
+    
+    // 确定最终总数：如果有原始 LIMIT，取 min(原始 LIMIT, 总数)
+    const total = originalLimit !== null ? Math.min(originalLimit, rawTotal) : rawTotal;
 
     let extMappings: ExtensionMapping[] = [];
     let extensionsResult: ExtensionInfo[] | undefined;
@@ -86,7 +92,20 @@ export class QueryExecutor {
     const baseSql = `SELECT ${selectClause} FROM ${fromClause} ${whereAndAfter}`;
 
     const offset = (page - 1) * pageSize;
-    const querySql = hasLimit(normalizedSql) ? baseSql : `${baseSql} LIMIT ${pageSize} OFFSET ${offset}`;
+    
+    // 计算实际要取的数量：如果有原始 LIMIT，不能超过 total - offset
+    let actualLimit = pageSize;
+    if (originalLimit !== null) {
+      actualLimit = Math.min(pageSize, Math.max(0, total - offset));
+    }
+    
+    // 构建查询 SQL：如果 offset 超过 total，就加 LIMIT 0
+    let querySql: string;
+    if (offset >= total) {
+      querySql = `${baseSql} LIMIT 0`;
+    } else {
+      querySql = `${baseSql} LIMIT ${actualLimit} OFFSET ${offset}`;
+    }
 
     const queryResult: DBQueryResult = this.database.query(querySql);
 
