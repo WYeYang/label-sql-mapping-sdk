@@ -398,8 +398,7 @@ export class AppConfigManager {
    * 关键词匹配（fallback 方案）
    */
   private keywordSearch(keywords: string): string {
-    const matched: any[] = [];
-    const valueSet = new Set<string>();  // 去重
+    const matchedMap = new Map<string, any>();  // key: mapping.id
     const kwLower = keywords.toLowerCase();
     
     // 生成所有可能的 token（2-5字符）
@@ -415,6 +414,9 @@ export class AppConfigManager {
     for (const mapping of this.extensions.values()) {
       if (!mapping.items || mapping.items.length === 0) continue;
       
+      const matchedItems: any[] = [];
+      const valueSet = new Set<string>();
+      
       for (const item of mapping.items) {
         const valueLower = item.value.toLowerCase();
         const descLower = item.description?.toLowerCase() || '';
@@ -422,13 +424,22 @@ export class AppConfigManager {
           valueLower.includes(token) || descLower.includes(token)
         );
         if (isMatched && !valueSet.has(item.value)) {
-          matched.push({ id: mapping.id, name: mapping.name, ...item });
+          matchedItems.push(item);
           valueSet.add(item.value);
         }
       }
+      
+      if (matchedItems.length > 0) {
+        matchedMap.set(mapping.id, {
+          id: mapping.id,
+          name: mapping.name,
+          description: mapping.description,
+          items: matchedItems
+        });
+      }
     }
     
-    return JSON.stringify(matched);
+    return JSON.stringify(Array.from(matchedMap.values()));
   }
 
   /**
@@ -490,19 +501,34 @@ export class AppConfigManager {
     scores.sort((a, b) => b.score - a.score);
     const topScores = scores.slice(0, 10);
     
-    // 4. 获取对应的 item 信息
-    const matched: any[] = [];
+    // 4. 按 mapping.id 分组
+    const matchedMap = new Map<string, any>();
     const valueSet = new Set<string>();
     
     for (const { index } of topScores) {
       const item = this.embeddingCache.items[index];
-      if (item && !valueSet.has(item.value)) {
-        matched.push(item);
-        valueSet.add(item.value);
+      if (!item || valueSet.has(item.value)) continue;
+      
+      const mappingId = item.id;
+      const mapping = this.allMappings.find(m => m.id === mappingId);
+      if (!mapping) continue;
+      
+      if (!matchedMap.has(mappingId)) {
+        matchedMap.set(mappingId, {
+          id: mapping.id,
+          name: mapping.name,
+          description: mapping.description,
+          items: []
+        });
       }
+      
+      // 去掉 item 里的 id 和 name，只保留 item 自己的字段
+      const { id, name, ...itemWithoutId } = item;
+      matchedMap.get(mappingId)!.items.push(itemWithoutId);
+      valueSet.add(item.value);
     }
     
-    return matched;
+    return Array.from(matchedMap.values());
   }
 
   /**
