@@ -3,6 +3,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
+import { pinyin } from 'pinyin-pro';
 import { LLMConfig } from '../ai';
 import { LSMConfig, parseConfig, processConfigDefaults, MappingItem } from './index';
 
@@ -314,7 +315,7 @@ export class AppConfigManager {
   }
 
   /**
-   * 关键词匹配
+   * 关键词匹配（拼音 + 不连续中文匹配）
    */
   private keywordSearch(keywords: string): string {
     const matchedMap = new Map<string, any>();  // key: mapping.id
@@ -325,10 +326,16 @@ export class AppConfigManager {
     
     // 2. 生成 tokens
     const tokens: string[] = [];
+    const chineseSingleChars: string[] = [];
     
-    // 处理中文：2-5字符的子串
+    // 处理中文：单个字符 + 2-5字符的子串
     const chineseChars = kwLower.match(/[\u4e00-\u9fa5]+/g) || [];
     for (const chinese of chineseChars) {
+      // 单个字符（用于不连续匹配）
+      for (const char of chinese) {
+        chineseSingleChars.push(char);
+      }
+      // 2-5字符子串（用于连续匹配）
       for (let len = Math.min(5, chinese.length); len >= 2; len--) {
         for (let i = 0; i <= chinese.length - len; i++) {
           tokens.push(chinese.substring(i, i + len));
@@ -346,8 +353,18 @@ export class AppConfigManager {
     
     // 去重
     const uniqueTokens = Array.from(new Set(tokens));
+    const uniqueChineseChars = Array.from(new Set(chineseSingleChars));
+    
+    // 3. 生成搜索关键词的拼音（用于拼音匹配）
+    const kwPinyin = kwLower ? this.toPinyin(kwLower) : '';
     
     console.log(`[AppConfig] 搜索 tokens: ${uniqueTokens.slice(0, 10).join(', ')}${uniqueTokens.length > 10 ? '...' : ''}`);
+    if (uniqueChineseChars.length > 0) {
+      console.log(`[AppConfig] 中文单字符: ${uniqueChineseChars.join('')}`);
+    }
+    if (kwPinyin) {
+      console.log(`[AppConfig] 搜索拼音: ${kwPinyin}`);
+    }
     
     for (const mapping of this.extensions.values()) {
       if (!mapping.items || mapping.items.length === 0) continue;
@@ -358,9 +375,39 @@ export class AppConfigManager {
       for (const item of mapping.items) {
         const valueLower = item.value.toLowerCase();
         const descLower = item.description?.toLowerCase() || '';
-        const isMatched = uniqueTokens.some(token => 
-          valueLower.includes(token) || descLower.includes(token)
+        const searchStr = `${valueLower} ${descLower}`;
+        
+        // 生成 item 的拼音
+        const itemPinyin = this.toPinyin(searchStr);
+        
+        // 检查 1: 连续 token 匹配
+        let isMatched = uniqueTokens.some(token => 
+          searchStr.includes(token)
         );
+        
+        // 检查 2: 中文单字符的不连续匹配
+        if (!isMatched && uniqueChineseChars.length > 0) {
+          let lastIndex = -1;
+          let allFound = true;
+          for (const char of uniqueChineseChars) {
+            const index = searchStr.indexOf(char, lastIndex + 1);
+            if (index === -1) {
+              allFound = false;
+              break;
+            }
+            lastIndex = index;
+          }
+          isMatched = allFound;
+        }
+        
+        // 检查 3: 拼音匹配
+        if (!isMatched && kwPinyin) {
+          // 拼音包含匹配
+          if (itemPinyin.includes(kwPinyin) || kwPinyin.includes(itemPinyin)) {
+            isMatched = true;
+          }
+        }
+        
         if (isMatched && !valueSet.has(item.value)) {
           matchedItems.push(item);
           valueSet.add(item.value);
@@ -378,6 +425,22 @@ export class AppConfigManager {
     }
     
     return JSON.stringify(Array.from(matchedMap.values()));
+  }
+
+  /**
+   * 文本转拼音
+   */
+  private toPinyin(text: string): string {
+    if (!text) return '';
+    try {
+      return pinyin(text, {
+        toneType: 'none',
+        type: 'string'
+      }).toLowerCase();
+    } catch (err) {
+      console.error(`[AppConfig] 拼音转换失败:`, err);
+      return '';
+    }
   }
 
   /**
