@@ -318,17 +318,36 @@ export class AppConfigManager {
    */
   private keywordSearch(keywords: string): string {
     const matchedMap = new Map<string, any>();  // key: mapping.id
-    const kwLower = keywords.toLowerCase();
     
-    // 生成所有可能的 token（2-5字符）
+    // 1. 预处理：去掉特殊字符，只保留中文、英文、数字
+    const cleanKeywords = keywords.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, '');
+    const kwLower = cleanKeywords.toLowerCase();
+    
+    // 2. 生成 tokens
     const tokens: string[] = [];
-    for (let len = Math.min(5, kwLower.length); len >= 2; len--) {
-      for (let i = 0; i <= kwLower.length - len; i++) {
-        tokens.push(kwLower.substring(i, i + len));
+    
+    // 处理中文：2-5字符的子串
+    const chineseChars = kwLower.match(/[\u4e00-\u9fa5]+/g) || [];
+    for (const chinese of chineseChars) {
+      for (let len = Math.min(5, chinese.length); len >= 2; len--) {
+        for (let i = 0; i <= chinese.length - len; i++) {
+          tokens.push(chinese.substring(i, i + len));
+        }
       }
     }
     
-    console.log(`[AppConfig] 搜索 tokens: ${tokens.slice(0, 10).join(', ')}${tokens.length > 10 ? '...' : ''}`);
+    // 处理英文：整个单词，不拆成单个字母
+    const englishWords = kwLower.match(/[a-zA-Z]+/g) || [];
+    for (const word of englishWords) {
+      if (word.length >= 2) {
+        tokens.push(word);
+      }
+    }
+    
+    // 去重
+    const uniqueTokens = Array.from(new Set(tokens));
+    
+    console.log(`[AppConfig] 搜索 tokens: ${uniqueTokens.slice(0, 10).join(', ')}${uniqueTokens.length > 10 ? '...' : ''}`);
     
     for (const mapping of this.extensions.values()) {
       if (!mapping.items || mapping.items.length === 0) continue;
@@ -339,7 +358,7 @@ export class AppConfigManager {
       for (const item of mapping.items) {
         const valueLower = item.value.toLowerCase();
         const descLower = item.description?.toLowerCase() || '';
-        const isMatched = tokens.some(token => 
+        const isMatched = uniqueTokens.some(token => 
           valueLower.includes(token) || descLower.includes(token)
         );
         if (isMatched && !valueSet.has(item.value)) {
