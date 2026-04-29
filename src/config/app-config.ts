@@ -317,7 +317,7 @@ export class AppConfigManager {
   /**
    * 关键词匹配（子串匹配 + 拼音辅助）
    */
-  private keywordSearch(keywords: string): string {
+  private keywordSearch(keywords: string): any[][] {
     const matchedMap = new Map<string, any>();  // key: mapping.id
     
     // 1. 预处理：去掉特殊字符，只保留中文、英文、数字
@@ -418,7 +418,23 @@ export class AppConfigManager {
     const result = Array.from(matchedMap.values()).map(({ id, name, items }) => [id, name, items]);
     console.log(`[AppConfig] 总匹配配置数: ${result.length}`);
     
-    return JSON.stringify(result);
+    return result;  // 返回原始数组，不做 JSON.stringify
+  }
+
+  /**
+   * 格式化搜索结果为纯文本
+   */
+  public formatSearchResult(result: any[]): string {
+    if (!result || result.length === 0) {
+      return '';
+    }
+    
+    return result.map(([id, name, items]) => {
+      const itemsStr = items.map(([value, condition]: [string, string]) => 
+        `${value} | ${condition}`
+      ).join('\n  ');
+      return `${id} (${name}):\n  ${itemsStr}`;
+    }).join('\n');
   }
 
   /**
@@ -443,13 +459,14 @@ export class AppConfigManager {
   /**
    * 用 keywords 搜索 extension mappings（仅关键词匹配）
    * @param keywords 用户输入的关键词（字符串）
-   * @returns JSON 格式的匹配 item 列表
+   * @returns 纯文本格式的匹配 item 列表
    */
   async searchByKeywords(keywords: string): Promise<string> {
-    if (!keywords || !keywords.trim()) return '[]';
+    if (!keywords || !keywords.trim()) return '';
     
     console.log('[AppConfig] 使用关键词匹配');
-    return this.keywordSearch(keywords);
+    const result = await this.keywordSearch(keywords);
+    return this.formatSearchResult(result);
   }
 
   /**
