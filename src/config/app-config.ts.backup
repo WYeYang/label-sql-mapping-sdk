@@ -315,7 +315,7 @@ export class AppConfigManager {
   }
 
   /**
-   * 关键词匹配（子串匹配 + 拼音辅助）
+   * 关键词匹配（拼音 + 不连续中文匹配）
    */
   private keywordSearch(keywords: string): string {
     const matchedMap = new Map<string, any>();  // key: mapping.id
@@ -324,12 +324,18 @@ export class AppConfigManager {
     const cleanKeywords = keywords.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, '');
     const kwLower = cleanKeywords.toLowerCase();
     
-    // 2. 生成 tokens - 只生成 2-5 字符的子串和英文单词
+    // 2. 生成 tokens
     const tokens: string[] = [];
+    const chineseSingleChars: string[] = [];
     
-    // 处理中文：2-5字符子串
+    // 处理中文：单个字符 + 2-5字符的子串
     const chineseChars = kwLower.match(/[\u4e00-\u9fa5]+/g) || [];
     for (const chinese of chineseChars) {
+      // 单个字符（用于不连续匹配）
+      for (const char of chinese) {
+        chineseSingleChars.push(char);
+      }
+      // 2-5字符子串（用于连续匹配）
       for (let len = Math.min(5, chinese.length); len >= 2; len--) {
         for (let i = 0; i <= chinese.length - len; i++) {
           tokens.push(chinese.substring(i, i + len));
@@ -347,19 +353,23 @@ export class AppConfigManager {
     
     // 去重
     const uniqueTokens = Array.from(new Set(tokens));
+    const uniqueChineseChars = Array.from(new Set(chineseSingleChars));
     
     // 3. 生成搜索关键词的拼音（用于拼音匹配）
     const kwPinyin = kwLower ? this.toPinyin(kwLower) : '';
     
-    console.log(`[AppConfig] 搜索 tokens: ${uniqueTokens.slice(0, 15).join(', ')}${uniqueTokens.length > 15 ? '...' : ''} (共 ${uniqueTokens.length} 个)`);
+    console.log(`[AppConfig] 搜索 tokens: ${uniqueTokens.slice(0, 10).join(', ')}${uniqueTokens.length > 10 ? '...' : ''}`);
+    if (uniqueChineseChars.length > 0) {
+      console.log(`[AppConfig] 中文单字符: ${uniqueChineseChars.join('')}`);
+    }
     if (kwPinyin) {
-      console.log(`[AppConfig] 搜索拼音: ${kwPinyin.substring(0, 100)}...`);
+      console.log(`[AppConfig] 搜索拼音: ${kwPinyin}`);
     }
     
     for (const mapping of this.extensions.values()) {
       if (!mapping.items || mapping.items.length === 0) continue;
       
-      const matchedItems: Array<{ item: any; count: number }> = [];
+      const matchedItems: any[] = [];
       const valueSet = new Set<string>();
       
       for (const item of mapping.items) {
@@ -370,73 +380,66 @@ export class AppConfigManager {
         // 生成 item 的拼音
         const itemPinyin = this.toPinyin(searchStr);
         
-        // 统计匹配次数
-        let matchCount = 0;
+        // 检查 1: 连续 token 匹配
+        let isMatched = uniqueTokens.some(token => 
+          searchStr.includes(token)
+        );
         
-        // 检查 1: 子串匹配（必须有至少一个子串匹配）
-        const matchedTokens: string[] = [];
-        for (const token of uniqueTokens) {
-          if (searchStr.includes(token)) {
-            matchedTokens.push(token);
-            matchCount++;
+        // 检查 2: 中文单字符的不连续匹配
+        if (!isMatched && uniqueChineseChars.length > 0) {
+          let lastIndex = -1;
+          let allFound = true;
+          for (const char of uniqueChineseChars) {
+            const index = searchStr.indexOf(char, lastIndex + 1);
+            if (index === -1) {
+              allFound = false;
+              break;
+            }
+            lastIndex = index;
+          }
+          isMatched = allFound;
+        }
+        
+        // 检查 3: 拼音匹配
+        if (!isMatched && kwPinyin) {
+          // 拼音包含匹配
+          if (itemPinyin.includes(kwPinyin) || kwPinyin.includes(itemPinyin)) {
+            isMatched = true;
           }
         }
         
-        // 如果没有子串匹配，直接跳过
-        if (matchCount === 0) {
-          continue;
-        }
-        
-        // 检查 2: 拼音匹配（作为加分项）
-        if (kwPinyin && (itemPinyin.includes(kwPinyin) || kwPinyin.includes(itemPinyin))) {
-          matchCount += 1;
-        }
-        
-        if (!valueSet.has(item.value)) {
-          matchedItems.push({ item, count: matchCount });
+        if (isMatched && !valueSet.has(item.value)) {
+          matchedItems.push(item);
           valueSet.add(item.value);
         }
       }
       
       if (matchedItems.length > 0) {
-        // 按匹配次数排序，取 top 5
-        const sortedItems = matchedItems
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 5)
-          .map(x => [x.item.value, x.item.condition] as any);
-        
         matchedMap.set(mapping.id, {
           id: mapping.id,
           name: mapping.name,
-          items: sortedItems
+          description: mapping.description,
+          items: matchedItems
         });
-        
-        console.log(`[AppConfig] ${mapping.name}: 匹配到 ${sortedItems.length} 个 items，前5个:`, sortedItems.slice(0, 5).map(([value]) => value));
       }
     }
     
-    const result = Array.from(matchedMap.values());
-    console.log(`[AppConfig] 总匹配配置数: ${result.length}`);
-    
-    return JSON.stringify(result);
+    return JSON.stringify(Array.from(matchedMap.values()));
   }
 
   /**
-   * 文本转拼音 - 只对中文部分转拼音
+   * 文本转拼音
    */
   private toPinyin(text: string): string {
     if (!text) return '';
     try {
-      // 只对中文部分转拼音，英文/数字保留原样
-      return text.replace(/[\u4e00-\u9fa5]+/g, (chinesePart) => {
-        return pinyin(chinesePart, {
-          toneType: 'none',
-          type: 'string'
-        }).toLowerCase();
-      });
+      return pinyin(text, {
+        toneType: 'none',
+        type: 'string'
+      }).toLowerCase();
     } catch (err) {
       console.error(`[AppConfig] 拼音转换失败:`, err);
-      return text;
+      return '';
     }
   }
 

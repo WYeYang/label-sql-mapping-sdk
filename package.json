@@ -34,6 +34,7 @@
     "better-sqlite3": "^12.9.0",
     "commander": "^12.1.0",
     "dotenv": "^17.4.2",
+    "fuse.js": "^7.3.0",
     "openai": "^6.34.0",
     "pinyin-pro": "^3.28.1",
     "simple-git": "^3.24.0",
