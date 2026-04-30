@@ -182,9 +182,39 @@ export class AppConfigManager {
   private load(): void {
     // 1. 解析 labels.yaml
     if (fs.existsSync(this.labelsPath)) {
-      this.labelsYamlContent = fs.readFileSync(this.labelsPath, 'utf8');
-      const parsed = yaml.parse(this.labelsYamlContent);
+      const rawContent = fs.readFileSync(this.labelsPath, 'utf8');
+      const parsed = yaml.parse(rawContent);
       this.labelsConfig = processConfigDefaults(parsed);
+      
+      // 生成简化版本，去掉所有重复的 key
+      const mappings = parsed.mappings || [];
+      const headerParts: string[] = [];
+      if (parsed.version) headerParts.push(`version: "${parsed.version}"`);
+      if (parsed.name) headerParts.push('name: ' + parsed.name);
+      if (parsed.id) headerParts.push('id: ' + parsed.id);
+      const parts = [...headerParts, '', 'mappings:'];
+      
+      for (const m of mappings) {
+        const desc = m.description ? ' # ' + m.description : '';
+        if (m.items && Array.isArray(m.items)) {
+          // 有 items 的格式：[id, name] # description + [[condition, value, description?], ...]
+          const itemsStr = m.items.map((item: any) => {
+            const itemDesc = item.description ? ' # ' + item.description : '';
+            return '    [' + item.condition + ', ' + item.value + itemDesc + ']';
+          }).join('\n');
+          parts.push('  - [' + m.id + ', ' + m.name + ']' + desc);
+          parts.push('  [' + itemsStr + ']');
+        } else {
+          // 没有 items 的格式：[id, name] # [condition, value, description?]
+          const cond = m.condition || '';
+          const val = m.value || '';
+          const mappingDesc = m.description ? ' # ' + m.description : '';
+          parts.push('  - [' + m.id + ', ' + m.name + ']' + mappingDesc);
+          parts.push('    [' + cond + ', ' + val + ']');
+        }
+      }
+      
+      this.labelsYamlContent = parts.join('\n');
     }
 
     // 2. 读取 extensions 目录下的所有扩展配置
