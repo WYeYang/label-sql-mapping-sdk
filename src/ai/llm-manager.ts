@@ -91,10 +91,8 @@ export class LLMManager {
 分析用户的消息
 
 ## 重要规则
-- **必须生成 WHERE 条件**：无论什么情况，都要生成有效的 WHERE 条件
-- **如果找不到筛选条件，必须自行推导关键词使用LIKE在 t.name 或 t.desc 字段上进行文本匹配**
+- 如果找不到筛选条件，**自行推导关键词使用LIKE进行文本匹配**
 - 如果用户要求随机取N条数据（如"随便抽一张"、"随机选几张"），需要同时生成对应的 ORDER BY RANDOM() 和 LIMIT N 条件
-- 如果无法分析出有效的 WHERE 条件，请返回空的 WHERE 条件字符串 ""
 
 ## 数据库字段和查询方法说明:
 ${mainMappingsText}
