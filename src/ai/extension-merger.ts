@@ -71,7 +71,10 @@ export class ExtensionMerger {
    */
   buildWhereConditions(extensions: ExtensionInfo[]): string {
     if (!extensions.length) return '';
-    const conditions: string[] = [];
+    
+    // 分类：枚举型（有 items）用 AND，文本型（无 items）用 OR
+    const enumConditions: string[] = [];
+    const textConditions: string[] = [];
 
     for (const ext of extensions) {
       const extMapping = this.extensions.find(e => e.id === ext.id);
@@ -101,16 +104,35 @@ export class ExtensionMerger {
 
       // 拼接条件
       if (valueConditions.length) {
-        const extCondition = valueConditions.length === 1 ? valueConditions[0] : `(${valueConditions.join(' OR ')})`;
-        if (extMapping.condition) {
-          conditions.push(`(${extMapping.condition} AND ${extCondition})`);
+        const extCondition = valueConditions.length === 1 
+          ? valueConditions[0] 
+          : `(${valueConditions.join(' OR ')})`;
+        
+        const finalCondition = extMapping.condition 
+          ? `(${extMapping.condition} AND ${extCondition})` 
+          : extCondition;
+        
+        // 按类型分组
+        if (extMapping.items?.length) {
+          enumConditions.push(finalCondition);
         } else {
-          conditions.push(extCondition);
+          textConditions.push(finalCondition);
         }
       }
     }
 
-    return conditions.length ? conditions.join(' AND ') : '';
+    // 组合结果：枚举型 AND，文本型 OR
+    const parts: string[] = [];
+    if (enumConditions.length) {
+      parts.push(enumConditions.join(' AND '));
+    }
+    if (textConditions.length) {
+      parts.push(textConditions.length === 1 
+        ? textConditions[0] 
+        : `(${textConditions.join(' OR ')})`);
+    }
+
+    return parts.length ? parts.join(' AND ') : '';
   }
 
   /**
