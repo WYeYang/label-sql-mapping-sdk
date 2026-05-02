@@ -327,6 +327,40 @@ const result = await sdk.query({
 });
 ```
 
+### extensions 搜索逻辑
+
+#### 配置类型判断
+
+| 配置类型 | 判断依据 |
+|---------|---------|
+| **枚举型** | `mapping.items` 存在 |
+| **文本型** | `mapping.items` 为空 |
+
+#### 连接规则
+
+| 配置类型 | 多 values 连接 | 多 id 连接 |
+|---------|--------------|-----------|
+| **枚举型** | OR | AND |
+| **文本型** | OR | OR |
+
+#### 示例说明
+
+```typescript
+// 枚举型多 id → AND
+extensions: [
+  { id: 'category', values: ['电子产品'] },
+  { id: 'brand', values: ['Apple'] }
+]
+// → category = '电子产品' AND brand = 'Apple'
+
+// 文本型多 id → OR
+extensions: [
+  { id: 'name', values: ['手机'] },
+  { id: 'desc', values: ['手机'] }
+]
+// → name LIKE '%手机%' OR desc LIKE '%手机%'
+```
+
 ### 配置访问方法
 
 SDK 开放了直接访问读取成功配置的功能：
