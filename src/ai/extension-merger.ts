@@ -4,10 +4,20 @@ import type { ExtensionMapping } from '../config';
 
 /**
  * 扩展标签信息
+ * @example 单值查询: { id: "def", values: ["1500"] }
+ * @example 多值查询: { id: "def", values: ["1000", "1500", "2000"] }
+ * @example 范围查询: { id: "def", range: { min: 1000, max: 2000 } }
  */
 export interface ExtensionInfo {
+  /** 映射配置 id */
   id: string;
-  values: string[];
+  /** 单值或多值查询 */
+  values?: string[];
+  /** 范围查询（min/max 都可省略） */
+  range?: {
+    min?: number;
+    max?: number;
+  };
 }
 
 /**
@@ -80,6 +90,40 @@ export class ExtensionMerger {
       const extMapping = this.extensions.find(e => e.id === ext.id);
       if (!extMapping) continue;
 
+      // 处理 range 范围查询
+      if (ext.range) {
+        const field = extMapping.value;
+        if (!field) continue;
+
+        const conditions: string[] = [];
+        if (ext.range.min !== undefined) {
+          conditions.push(`${field} >= ${ext.range.min}`);
+        }
+        if (ext.range.max !== undefined) {
+          conditions.push(`${field} <= ${ext.range.max}`);
+        }
+
+        if (conditions.length > 0) {
+          const rangeCondition = conditions.length === 1
+            ? conditions[0]
+            : `(${conditions.join(' AND ')})`;
+
+          const finalCondition = extMapping.condition
+            ? `(${extMapping.condition} AND ${rangeCondition})`
+            : rangeCondition;
+
+          if (extMapping.items?.length) {
+            enumConditions.push(finalCondition);
+          } else {
+            textConditions.push(finalCondition);
+          }
+        }
+        continue;
+      }
+
+      // 处理 values
+      if (!ext.values?.length) continue;
+
       const valueConditions: string[] = [];
 
       for (const value of ext.values) {
@@ -104,14 +148,14 @@ export class ExtensionMerger {
 
       // 拼接条件
       if (valueConditions.length) {
-        const extCondition = valueConditions.length === 1 
-          ? valueConditions[0] 
+        const extCondition = valueConditions.length === 1
+          ? valueConditions[0]
           : `(${valueConditions.join(' OR ')})`;
-        
-        const finalCondition = extMapping.condition 
-          ? `(${extMapping.condition} AND ${extCondition})` 
+
+        const finalCondition = extMapping.condition
+          ? `(${extMapping.condition} AND ${extCondition})`
           : extCondition;
-        
+
         // 按类型分组
         if (extMapping.items?.length) {
           enumConditions.push(finalCondition);

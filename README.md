@@ -329,6 +329,29 @@ const result = await sdk.query({
 
 ### extensions 搜索逻辑
 
+#### ExtensionInfo 结构
+
+```typescript
+interface ExtensionInfo {
+  id: string;      // 映射配置 id
+  values?: string[]; // 单值或多值查询
+  range?: {         // 范围查询
+    min?: number;
+    max?: number;
+  };
+}
+```
+
+#### 查询类型
+
+| 查询类型 | 示例 | 输出 |
+|---------|------|------|
+| 单值 | `{ id: 'def', values: ['1500'] }` | `d.def = 1500` |
+| 多值 OR | `{ id: 'def', values: ['1000', '1500', '2000'] }` | `d.def = 1000 OR d.def = 1500 OR d.def = 2000` |
+| 范围 | `{ id: 'def', range: { min: 1000, max: 2000 } }` | `d.def >= 1000 AND d.def <= 2000` |
+| 范围(仅最小) | `{ id: 'def', range: { min: 2000 } }` | `d.def >= 2000` |
+| 范围(仅最大) | `{ id: 'def', range: { max: 1500 } }` | `d.def <= 1500` |
+
 #### 配置类型判断
 
 | 配置类型 | 判断依据 |
