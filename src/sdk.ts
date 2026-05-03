@@ -186,9 +186,9 @@ export class LSMSDK {
   }): Promise<QueryResult> {
     const { query, sql, page = 1, pageSize = 20, systemPrompt } = options;
 
-    // 检测 extensions 中是否有 id='id'，如果有则用 detail 模式
+    // 检测 extensions 中只有一个 id='id'，如果有则用 detail 模式
     const aiExtensions: ExtensionInfo[] = options.extensions ?? [];
-    const idExtension = aiExtensions.find(ext => ext.id === 'id');
+    const idExtension = aiExtensions.length === 1 ? aiExtensions.find(ext => ext.id === 'id') : null;
     const isDetailMode = !!idExtension;
     const usePage = isDetailMode ? 1 : page;
     const usePageSize = isDetailMode ? 1 : pageSize;
