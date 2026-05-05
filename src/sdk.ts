@@ -98,9 +98,10 @@ export class LSMSDK {
     this.llmManager = new LLMManager(llm);
     
     const allMappings = this.appConfigManager.getAllMappings();
+    const extMappings = this.appConfigManager.getExtensions();
     this.sqlHelper = SqlHelper.create(labelsConfig);
-    this.sqlHelper.setExtensions(allMappings);
-    this.queryExecutor = new QueryExecutor(this.database, this.sqlHelper, allMappings);
+    this.sqlHelper.setExtensions(extMappings);
+    this.queryExecutor = new QueryExecutor(this.database, this.sqlHelper, extMappings);
     this.extMerger = new ExtensionMerger(allMappings);
   }
 
@@ -214,7 +215,7 @@ export class LSMSDK {
     } else if (sql) {
       fullSqlStr = sql;
     } else if (aiExtensions.length > 0) {
-      fullSqlStr = this.sqlHelper.buildBaseSql(false);
+      fullSqlStr = this.sqlHelper.buildBaseSql(true);
     } else {
       throw new Error('请提供 query 或 sql 或 extensions 参数');
     }

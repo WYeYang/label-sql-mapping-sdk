@@ -106,7 +106,6 @@ export class QueryExecutor {
     } else {
       querySql = `${baseSql} LIMIT ${actualLimit} OFFSET ${offset}`;
     }
-
     const queryResult: DBQueryResult = this.database.query(querySql);
 
     return { 
