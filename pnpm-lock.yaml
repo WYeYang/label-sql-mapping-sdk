@@ -11,6 +11,13 @@ importers:
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.10.0
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/node':
+        specifier: ^20.11.30
+        version: 20.19.41
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -29,19 +36,12 @@ importers:
       simple-git:
         specifier: ^3.24.0
         version: 3.36.0
-      yaml:
-        specifier: ^2.3.4
-        version: 2.9.0
-    devDependencies:
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^20.11.30
-        version: 20.19.41
       typescript:
         specifier: ^5.4.3
         version: 5.9.3
+      yaml:
+        specifier: ^2.3.4
+        version: 2.9.0
 
 packages:
 
