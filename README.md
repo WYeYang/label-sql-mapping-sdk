@@ -21,18 +21,30 @@
 
 ### 1. 安装 SDK
 
+推荐从 GitHub Releases 下载预编译的 tarball 安装，无需编译：
+
+```bash
+npm install https://github.com/WYeYang/label-sql-mapping-sdk/releases/download/v1.0.0/label-sql-mapping-sdk-v1.0.0.tar.gz
+```
+
+或者从 npm 安装（如果已发布到 npm）：
+
 ```bash
 npm install label-sql-mapping-sdk
 ```
 
 ### 2. 安装配置
 
-有两种方式：
-
-**方式 A：安装 `lsm-*` 配置包**
+推荐从 GitHub Releases 下载配置包 tarball 安装：
 
 ```bash
-npm install lsm-xxx-database
+npm install https://github.com/WYeYang/lsm-ygopro-database/releases/download/v1.0.0/lsm-ygopro-database-v1.0.0.tar.gz
+```
+
+或者从 GitHub 仓库安装：
+
+```bash
+npm install https://github.com/WYeYang/lsm-ygopro-database
 ```
 
 **方式 B：指定配置文件路径**
