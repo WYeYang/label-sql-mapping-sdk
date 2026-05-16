@@ -1,5 +1,8 @@
 # Label-SQL Mapping (LSM) SDK
 
+[![Build Status](https://github.com/WYeYang/label-sql-mapping-sdk/actions/workflows/release.yml/badge.svg)](https://github.com/WYeYang/label-sql-mapping-sdk/actions/workflows/release.yml)
+[![Version](https://img.shields.io/badge/version-v1.0.0-blue)](https://github.com/WYeYang/label-sql-mapping-sdk/releases/tag/v1.0.0)
+
 通过自然语言或 SQL 查询结构化数据库的 SDK，支持配置驱动的多数据库扩展。
 
 > **声明**：当前仅支持 SQLite 数据库。
