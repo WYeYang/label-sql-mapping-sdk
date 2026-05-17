@@ -24,7 +24,7 @@
 推荐从 GitHub Releases 下载预编译的 tarball 安装，无需编译：
 
 ```bash
-npm install https://github.com/WYeYang/label-sql-mapping-sdk/releases/download/v1.0.0/label-sql-mapping-sdk-v1.0.0.tar.gz
+npm install https://github.com/WYeYang/label-sql-mapping-sdk/releases/download/v1.0.0/lsm-sdk-1.0.0.tgz
 ```
 
 或者从 npm 安装（如果已发布到 npm）：
