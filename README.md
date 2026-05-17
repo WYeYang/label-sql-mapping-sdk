@@ -1,7 +1,7 @@
 # Label-SQL Mapping (LSM) SDK
 
 [![Build Status](https://github.com/WYeYang/label-sql-mapping-sdk/actions/workflows/release.yml/badge.svg)](https://github.com/WYeYang/label-sql-mapping-sdk/actions/workflows/release.yml)
-[![Version](https://img.shields.io/badge/version-v1.0.0-blue)](https://github.com/WYeYang/label-sql-mapping-sdk/releases/tag/v1.0.0)
+[![GitHub Release](https://img.shields.io/github/v/release/WYeYang/label-sql-mapping-sdk?sort=semver)](https://github.com/WYeYang/label-sql-mapping-sdk/releases)
 
 通过自然语言或 SQL 查询结构化数据库的 SDK，支持配置驱动的多数据库扩展。
 
@@ -24,7 +24,8 @@
 推荐从 GitHub Releases 下载预编译的 tarball 安装，无需编译：
 
 ```bash
-npm install https://github.com/WYeYang/label-sql-mapping-sdk/releases/download/v1.0.0/lsm-sdk-1.0.0.tgz
+# 去 https://github.com/WYeYang/label-sql-mapping-sdk/releases 下载最新版本的 tgz 文件
+npm install /path/to/lsm-sdk-*.tgz
 ```
 
 或者从 npm 安装（如果已发布到 npm）：
