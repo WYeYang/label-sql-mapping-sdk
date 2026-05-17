@@ -25,22 +25,18 @@ jobs:
           node-version: 24
           cache: 'pnpm'
       
-      - name: Install dependencies (only dev)
-        run: pnpm install --dev
+      - name: Install dependencies
+        run: pnpm install
       
       - name: Build
         run: pnpm run build
       
       - name: Create tarball
-        run: |
-          mkdir -p package
-          cp -r dist package.json README.md package/
-          cd package
-          tar -czf ../label-sql-mapping-sdk-${{ github.ref_name }}.tar.gz .
+        run: npm pack
       
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: label-sql-mapping-sdk-${{ github.ref_name }}.tar.gz
+          files: lsm-sdk-*.tgz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
