@@ -11,7 +11,8 @@
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build"
+    "update-readme-version": "node -e \"const pkg = require('./package.json'); const fs = require('fs'); let readme = fs.readFileSync('README.md', 'utf8'); readme = readme.replace(/badge\\/version-v[\\d.]+-blue/, 'badge/version-v' + pkg.version + '-blue'); readme = readme.replace(/releases\\/tag\\/v[\\d.]+/, 'releases/tag/v' + pkg.version); fs.writeFileSync('README.md', readme, 'utf8'); console.log('README.md version updated to v' + pkg.version);\"",
+    "prepublishOnly": "npm run update-readme-version && npm run build"
   },
   "files": [
     "dist/",
@@ -35,18 +36,18 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "better-sqlite3": "^12.9.0"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^20.11.30",
+    "better-sqlite3": "^12.9.0",
     "commander": "^12.1.0",
     "dotenv": "^17.4.2",
     "fuse.js": "^7.3.0",
     "openai": "^6.34.0",
     "pinyin-pro": "^3.28.1",
-    "simple-git": "^3.24.0",
-    "typescript": "^5.4.3",
     "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.11.30",
+    "simple-git": "^3.24.0",
+    "typescript": "^5.4.3"
   }
 }
